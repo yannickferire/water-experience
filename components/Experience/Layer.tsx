@@ -28,8 +28,8 @@ const LEAF_MIN_V = 0.32;
 const LEAF_CHANCE = 0.28;
 // How far layers travel horizontally over the full scroll (in viewport widths, parallax=1).
 const SCROLL_SPAN = 1.8;
-// Zoom amplitude over the journey (zoom-in mid-way, back out at the end).
-const ZOOM_AMP = 0.35;
+// Zoom amplitude over the journey (subtle, so stations stay roughly centered).
+const ZOOM_AMP = 0.18;
 
 type Props = {
   def: LayerDef;
@@ -45,6 +45,7 @@ export default function Layer({ def, order, scrollRef }: Props) {
   const mouse = useRef(new THREE.Vector2(0, 0));
   const queue = useRef<EmitReq[]>([]);
   const hoverObj = useRef(false); // currently over the painted object (not paper)
+  const elapsed = useRef(0); // for the staggered intro bloom
 
   const tex = useTexture(def.src);
   useMemo(() => {
@@ -87,6 +88,7 @@ export default function Layer({ def, order, scrollRef }: Props) {
       uTime: { value: 0 },
       uDistort: { value: def.distortion ?? 0.016 },
       uBaseOpacity: { value: def.baseOpacity ?? 0.5 },
+      uAppear: { value: 0 },
     }),
     [tex, def.distortion, def.baseOpacity]
   );
@@ -106,6 +108,12 @@ export default function Layer({ def, order, scrollRef }: Props) {
 
     mat.uniforms.uTime.value += dt;
     mat.uniforms.uWet.value = water.textureRef.current;
+
+    // Staggered intro bloom: deeper layers (lower order) appear first.
+    elapsed.current += dt;
+    const delay = order * 0.3;
+    const p = THREE.MathUtils.clamp((elapsed.current - delay) / 2.6, 0, 1);
+    mat.uniforms.uAppear.value = 1 - Math.pow(1 - p, 3); // easeOutCubic
 
     const scroll = scrollRef.current;
     // Horizontal camera travel: layers pan left, faster ones in front (parallax).

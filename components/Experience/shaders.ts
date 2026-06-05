@@ -24,6 +24,7 @@ export const layerFragmentShader = /* glsl */ `
   uniform float uTime;
   uniform float uDistort;       // max distortion amplitude
   uniform float uBaseOpacity;   // opacity at rest (~0.5)
+  uniform float uAppear;        // 0..1 organic "ink-bloom" reveal
 
   // --- 2D Simplex noise (Ashima) ---
   vec3 mod289(vec3 x){ return x - floor(x * (1.0/289.0)) * 289.0; }
@@ -52,6 +53,26 @@ export const layerFragmentShader = /* glsl */ `
     return 130.0 * dot(m, g);
   }
 
+  // Fractal noise (clouds) — sum of octaves, ~0..1.
+  float fbm(vec2 p){
+    float v = 0.0;
+    float a = 0.5;
+    for(int i = 0; i < 4; i++){
+      v += a * (snoise(p) * 0.5 + 0.5);
+      p *= 2.0;
+      a *= 0.5;
+    }
+    return v;
+  }
+
+  // "Paper-ness" (0 pigment, 1 paper) of the image at a given uv.
+  float paperAt(vec2 p){
+    vec3 c = texture2D(uMap, p).rgb;
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    float s = max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b));
+    return smoothstep(0.86, 0.98, l) * (1.0 - smoothstep(0.05, 0.13, s));
+  }
+
   void main(){
     // Sample the wetness field with a small noise warp -> organic, wavy edges.
     vec2 warp = vec2(snoise(vUv * 4.0 + 7.3), snoise(vUv * 4.0 + 19.1));
@@ -61,31 +82,51 @@ export const layerFragmentShader = /* glsl */ `
     float halo = smoothstep(0.06, 0.30, wet);
     float core = smoothstep(0.40, 0.75, wet);
 
-    // Local distortion follows the wet area, fades as it gets absorbed.
+    // ERODED interior mask: take the max "paper-ness" over a neighborhood, so any
+    // structure thinner than the erosion radius (trunk, branches) drops to 0 and
+    // never distorts, while large masses (canopy) keep distorting. The silhouette
+    // also stays fixed since distortion -> 0 near every pigment/paper boundary.
+    float o = 0.045; // erosion radius (uv) ~ half the trunk width
+    float paperMax = paperAt(vUv);
+    paperMax = max(paperMax, paperAt(vUv + vec2(o, 0.0)));
+    paperMax = max(paperMax, paperAt(vUv - vec2(o, 0.0)));
+    paperMax = max(paperMax, paperAt(vUv + vec2(0.0, o)));
+    paperMax = max(paperMax, paperAt(vUv - vec2(0.0, o)));
+    paperMax = max(paperMax, paperAt(vUv + vec2(o, o) * 0.7));
+    paperMax = max(paperMax, paperAt(vUv - vec2(o, o) * 0.7));
+    paperMax = max(paperMax, paperAt(vUv + vec2(o, -o) * 0.7));
+    paperMax = max(paperMax, paperAt(vUv - vec2(o, -o) * 0.7));
+    float interior = 1.0 - paperMax;
+
+    // "Cloud dissipating" appearance: a fractal (fbm) cloud gives each pixel a
+    // threshold, revealed as uAppear sweeps 0 -> 1. Random cloudy patches clear,
+    // no directional sweep.
+    float dmap = fbm(vUv * 2.0 + 11.0);
+    float reveal = uAppear * 1.6 - 0.3; // remap so fully hidden at 0, fully shown at 1
+    float appear = smoothstep(dmap - 0.28, dmap + 0.28, reveal);
+
+    // Local distortion follows the wet area, fades as it gets absorbed,
+    // and is confined to the inside of the shape (eroded interior mask).
     float t = uTime * 0.5;
     vec2 dwarp = vec2(
       snoise(vUv * 3.0 + vec2(t, 1.7)),
       snoise(vUv * 3.0 + vec2(-1.3, t))
     );
-    vec2 uv = vUv + dwarp * (uDistort * halo);
+    vec2 uv = vUv + dwarp * (uDistort * halo * interior);
 
     vec3 col = texture2D(uMap, uv).rgb;
 
-    // Paper knockout: light & low-saturation pixels (white paper) -> pure white,
-    // invisible under multiply. Colored leaves untouched.
+    // Paper knockout: light & low-saturation pixels (white paper) -> pure white.
     float luma = dot(col, vec3(0.299, 0.587, 0.114));
-    float mx = max(col.r, max(col.g, col.b));
-    float mn = min(col.r, min(col.g, col.b));
-    float sat = mx - mn;
+    float sat = max(col.r, max(col.g, col.b)) - min(col.r, min(col.g, col.b));
     float paper = smoothstep(0.86, 0.98, luma) * (1.0 - smoothstep(0.05, 0.13, sat));
     col = mix(col, vec3(1.0), paper);
 
     // Opacity, three levels: base (~50%) -> halo to 65% -> core to 100%.
-    // (Under multiply, "less opaque" = pigment pushed toward white.)
     float opacity = uBaseOpacity;
     opacity = max(opacity, mix(uBaseOpacity, 0.65, halo));
     opacity = max(opacity, mix(uBaseOpacity, 1.00, core));
-    col = mix(vec3(1.0), col, opacity);
+    col = mix(vec3(1.0), col, opacity * appear);
 
     gl_FragColor = vec4(col, 1.0);
   }

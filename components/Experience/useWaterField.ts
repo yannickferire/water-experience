@@ -114,6 +114,11 @@ export function useWaterField(aspect: number) {
     wasActive: false,
   });
 
+  // Run the sim only while the sheet is "active" (recently wet). Idle sheets are
+  // paused entirely -> with N layers, only the one being interacted with runs.
+  const clock = useRef(0);
+  const activeUntil = useRef(0);
+
   function splat(u: number, v: number) {
     input.current.cur.set(u, v);
     input.current.has = true;
@@ -130,14 +135,25 @@ export function useWaterField(aspect: number) {
     gl.setRenderTarget(prev);
   }, [gl, rtA, rtB]);
 
-  useFrame((_, dt) => {
+  useFrame((_, dtRaw) => {
+    const inp = input.current;
+    const dt = Math.min(dtRaw, 1 / 30);
+    clock.current += dt;
+
+    // Keep the sim alive for a cooldown after the last splat (covers absorption),
+    // then pause it entirely. Skipping idle sheets saves most of the GPU cost.
+    if (inp.has) activeUntil.current = clock.current + 8;
+    if (clock.current > activeUntil.current) {
+      inp.has = false;
+      return;
+    }
+
     const { read, write } = targets.current;
     const u = sim.material.uniforms;
-    const inp = input.current;
 
     u.uPrev.value = read.texture;
     u.uAspect.value = aspect;
-    u.uDt.value = Math.min(dt, 1 / 30); // guard against long frames
+    u.uDt.value = dt;
     u.uSeed.value += dt * 60.0;
 
     if (inp.has) {

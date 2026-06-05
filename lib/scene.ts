@@ -29,46 +29,61 @@ export type LayerDef = {
   flipX?: boolean;
 };
 
-// Layers are listed back -> front (array index = render order).
-// For now the tree asset is reused at several depths to demonstrate the
-// camera-travel parallax with zero extra assets (atmospheric perspective:
-// distant = smaller + paler + slower parallax). Swap in real elements later.
+// Horizontal journey of "stations" (seasons) spread along X. Scroll pans the
+// layers left so each station comes to center in turn:
+//   station center scroll s  ->  x = s * SCROLL_SPAN * 2  (= s * 3.6)
+//   spring s=0 (x 0), summer s=0.5 (x 1.8), autumn s=1 (x 3.6).
+// Parallax kept near 1 (0.85..1.15) so a station's layers stay grouped while
+// still giving depth. Distant layers = smaller + paler (atmospheric perspective).
+// Listed back -> front (array index = render order). Winter station: add when
+// the asset exists.
 export const SCENE_LAYERS: LayerDef[] = [
+  // 🌸 Spring (x 0)
   {
-    id: "tree-far",
-    src: "/assets/tree-summer.jpg",
-    depth: 0.2,
-    scale: 0.42,
-    x: -0.55,
-    y: 0.22,
-    parallax: 0.3, // far -> moves slowly
-    baseOpacity: 0.28, // pale = distance haze
-    distortion: 0.01,
-    flipX: true,
+    id: "spring-far",
+    src: "/assets/tree-spring.jpg",
+    depth: 0.2, scale: 0.4, x: -0.45, y: 0.18,
+    parallax: 0.85, baseOpacity: 0.24, distortion: 0.01, flipX: true,
   },
   {
-    id: "tree",
-    src: "/assets/tree-summer.jpg",
-    depth: 0.6,
-    scale: 0.82,
-    x: 0,
-    y: -0.04,
-    parallax: 1.0, // hero
-    blend: "multiply",
-    distortion: 0.018,
-    baseOpacity: 0.5,
-    particles: true,
+    id: "spring-tree",
+    src: "/assets/tree-spring.jpg",
+    depth: 0.6, scale: 0.8, x: 0, y: -0.04,
+    parallax: 1.0, baseOpacity: 0.5, distortion: 0.018, particles: true,
   },
   {
-    id: "tree-front",
+    id: "spring-ducks",
+    src: "/assets/ducks-spring.jpg",
+    depth: 0.9, scale: 0.62, x: 0.15, y: -0.3,
+    parallax: 1.12, baseOpacity: 0.6, distortion: 0.014,
+  },
+
+  // ☀️ Summer (x 1.8)
+  {
+    id: "summer-far",
     src: "/assets/tree-summer.jpg",
-    depth: 0.95,
-    scale: 1.35,
-    x: 0.6,
-    y: -0.55,
-    parallax: 1.7, // near -> moves fast
-    baseOpacity: 0.5,
-    distortion: 0.02,
+    depth: 0.2, scale: 0.4, x: 1.4, y: 0.18,
+    parallax: 0.85, baseOpacity: 0.24, distortion: 0.01, flipX: true,
+  },
+  {
+    id: "summer-tree",
+    src: "/assets/tree-summer.jpg",
+    depth: 0.6, scale: 0.82, x: 1.8, y: -0.04,
+    parallax: 1.0, baseOpacity: 0.5, distortion: 0.018, particles: true,
+  },
+
+  // 🍂 Autumn (x 3.6)
+  {
+    id: "autumn-far",
+    src: "/assets/tree-autumn.jpg",
+    depth: 0.2, scale: 0.4, x: 3.2, y: 0.18,
+    parallax: 0.85, baseOpacity: 0.24, distortion: 0.01, flipX: true,
+  },
+  {
+    id: "autumn-tree",
+    src: "/assets/tree-autumn.jpg",
+    depth: 0.6, scale: 0.82, x: 3.6, y: -0.04,
+    parallax: 1.0, baseOpacity: 0.5, distortion: 0.018, particles: true,
   },
 ];
 
