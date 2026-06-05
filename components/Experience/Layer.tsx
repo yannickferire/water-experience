@@ -8,6 +8,7 @@ import type { LayerDef } from "@/lib/scene";
 import { layerFragmentShader, layerVertexShader } from "./shaders";
 import LeafEmitter, { type EmitReq } from "./LeafEmitter";
 import { useWaterField } from "./useWaterField";
+import { setCursorHover } from "@/lib/cursor";
 
 const BLEND: Record<string, THREE.Blending> = {
   multiply: THREE.MultiplyBlending,
@@ -35,6 +36,7 @@ export default function Layer({ def, order }: Props) {
   const matRef = useRef<THREE.ShaderMaterial>(null);
   const mouse = useRef(new THREE.Vector2(0, 0));
   const queue = useRef<EmitReq[]>([]);
+  const hoverObj = useRef(false); // currently over the painted object (not paper)
 
   const tex = useTexture(def.src);
   useMemo(() => {
@@ -53,9 +55,8 @@ export default function Layer({ def, order }: Props) {
   // GPU water field (wetness texture driven by the cursor).
   const water = useWaterField(aspect);
 
-  // CPU sampler (to detect foliage + its color for the leaf particles).
+  // CPU sampler (to detect paper vs object for hover + foliage for particles).
   const sampler = useMemo<Sampler | null>(() => {
-    if (!def.particles) return null;
     const image = tex.image as HTMLImageElement | undefined;
     if (!image?.width) return null;
     const c = document.createElement("canvas");
@@ -69,7 +70,7 @@ export default function Layer({ def, order }: Props) {
       w: c.width,
       h: c.height,
     };
-  }, [tex, def.particles]);
+  }, [tex]);
 
   const uniforms = useMemo(
     () => ({
@@ -108,16 +109,21 @@ export default function Layer({ def, order }: Props) {
     mesh.rotation.x = BASE_TILT_X - mouse.current.y * 0.12;
   });
 
+  const setHover = (over: boolean) => {
+    if (over === hoverObj.current) return;
+    hoverObj.current = over;
+    setCursorHover(over);
+  };
+
   const onMove = (e: ThreeEvent<PointerEvent>) => {
-    if (!e.uv) return;
+    if (!e.uv || !sampler) return;
     const u = e.uv.x;
     const v = e.uv.y;
 
     // Add water at the cursor (the field handles spreading + absorption).
     water.splat(u, v);
 
-    // Particles: only over the foliage (green pigment).
-    if (!sampler) return;
+    // Sample the pixel under the cursor.
     const x = Math.min(sampler.w - 1, Math.max(0, Math.floor(u * sampler.w)));
     const y = Math.min(sampler.h - 1, Math.max(0, Math.floor((1 - v) * sampler.h)));
     const i = (y * sampler.w + x) * 4;
@@ -127,7 +133,12 @@ export default function Layer({ def, order }: Props) {
     const luma = 0.299 * r + 0.587 * g + 0.114 * b;
     const sat = Math.max(r, g, b) - Math.min(r, g, b);
     const isPaper = luma > 0.9 && sat < 0.08;
-    // foliage = green pigment, upper part (excludes grass + trunk).
+
+    // Cursor "hover-image" only over the actual painted object (not white paper).
+    setHover(!isPaper);
+
+    // Particles: foliage only = green pigment, upper part (excludes grass + trunk).
+    if (!def.particles) return;
     const isLeaf =
       !isPaper && v > LEAF_MIN_V && g >= r * 0.92 && g >= b * 0.85 && luma < 0.92;
     if (!isLeaf || Math.random() > LEAF_CHANCE || queue.current.length > 40) return;
@@ -138,7 +149,13 @@ export default function Layer({ def, order }: Props) {
 
   return (
     <>
-      <mesh ref={meshRef} scale={[w, h, 1]} renderOrder={order} onPointerMove={onMove}>
+      <mesh
+        ref={meshRef}
+        scale={[w, h, 1]}
+        renderOrder={order}
+        onPointerMove={onMove}
+        onPointerOut={() => setHover(false)}
+      >
         <planeGeometry args={[1, 1]} />
         <shaderMaterial
           ref={matRef}
