@@ -23,11 +23,29 @@ export type LayerDef = {
   baseOpacity?: number;
   /** Emit little leaves when hovering the foliage. */
   particles?: boolean;
+  /** Scroll parallax factor: 0 = static far background, >1 = fast foreground. */
+  parallax?: number;
+  /** Mirror the layer horizontally (cheap variety when reusing an asset). */
+  flipX?: boolean;
 };
 
-// Step 1: only the tree so far. Placed centered, sitting on the "ground".
-// (other layers will come as the assets arrive)
+// Layers are listed back -> front (array index = render order).
+// For now the tree asset is reused at several depths to demonstrate the
+// camera-travel parallax with zero extra assets (atmospheric perspective:
+// distant = smaller + paler + slower parallax). Swap in real elements later.
 export const SCENE_LAYERS: LayerDef[] = [
+  {
+    id: "tree-far",
+    src: "/assets/tree-summer.jpg",
+    depth: 0.2,
+    scale: 0.42,
+    x: -0.55,
+    y: 0.22,
+    parallax: 0.3, // far -> moves slowly
+    baseOpacity: 0.28, // pale = distance haze
+    distortion: 0.01,
+    flipX: true,
+  },
   {
     id: "tree",
     src: "/assets/tree-summer.jpg",
@@ -35,10 +53,22 @@ export const SCENE_LAYERS: LayerDef[] = [
     scale: 0.82,
     x: 0,
     y: -0.04,
+    parallax: 1.0, // hero
     blend: "multiply",
     distortion: 0.018,
     baseOpacity: 0.5,
     particles: true,
+  },
+  {
+    id: "tree-front",
+    src: "/assets/tree-summer.jpg",
+    depth: 0.95,
+    scale: 1.35,
+    x: 0.6,
+    y: -0.55,
+    parallax: 1.7, // near -> moves fast
+    baseOpacity: 0.5,
+    distortion: 0.02,
   },
 ];
 

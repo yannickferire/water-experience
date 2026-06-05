@@ -1,158 +1,95 @@
-# Assets — Voyage des saisons (génération IA)
+# Assets — Voyage horizontal des 4 saisons (aquarelle)
 
-Diorama **aquarelle** en **couches PNG transparentes**, parallax + distorsion
-au hover, traversant les **4 saisons** au scroll, sur **Les Quatre Saisons de
-Vivaldi**. Style : aquarelle (lavis translucides) — colle au nom « water » et
-sublime l'effet de distorsion liquide.
+On traverse **horizontalement** 4 stations : **Printemps → Été → Automne → Hiver**
+(ordre Vivaldi). Chaque saison = une petite compo en couches (parallax + zoom),
+sur **Les Quatre Saisons de Vivaldi**.
 
-Principe : **les mêmes éléments restent visibles** dans toute l'expérience, mais
-chaque élément **se transforme selon la saison** (feuillage, couleur du sol,
-ciel), + des **surcouches météo** (soleil, pluie, neige, pétales).
+Style : **aquarelle**, composité en **`multiply`** (fond blanc, pas de détourage).
 
 ---
 
-## 0. Specs techniques (format) + compositing
+## 0. Format (rappel)
 
-**Méthode par défaut : `multiply` (PAS de détourage).** L'aquarelle a des bords
-clairs/translucides que remove.bg supprime (il mange les feuilles claires). On
-évite le problème : tu **exportes sur fond BLANC** et le shader composite en
-`multiply` → le papier blanc devient invisible tout seul, les zones claires sont
-préservées, rendu « pigment superposé » fidèle à l'aquarelle.
+- Éléments → **PNG ou JPG sur fond BLANC**, AUCUN détourage (le multiply rend le
+  blanc invisible). sRGB.
+- Sujet **centré, entier, avec marge**. ~1500-2048 px grand côté.
+- Exception éléments **clairs** (soleil, neige, oiseaux blancs) → vrai PNG
+  transparent OU blend `screen` (peu nombreux, traités à part).
 
-- Éléments à pigment sombre (arbre, faune, sol, collines, buissons) →
-  **fond blanc, JPG ou PNG, AUCUN détourage**. C'est tout.
-- Ciel (plaque de fond) → JPG/PNG **opaque**, plein cadre ~16:9.
-- Résolution : **1500–2048 px** grand côté pour gros éléments, ~1024 px petits.
-- Sujet **centré, entier, avec marge** (papier blanc qui respire autour).
-- sRGB, 8-bit.
+## 1. STYLE BIBLE (coller à CHAQUE prompt)
 
-**Exception — éléments CLAIRS** (neige, soleil, oiseaux/fleurs blancs) : le
-multiply ne sait pas afficher du clair sur du foncé. Pour eux → vrai PNG
-transparent (générateur à alpha : **Recraft/Firefly/Ideogram**) OU blend
-`screen`. Ils sont peu nombreux, on les traite à part.
-
----
-
-## 1. STYLE BIBLE (à coller sur CHAQUE prompt)
-
-> **Suffixe de style** — copie-le tel quel à la fin de chaque prompt :
 ```
 , loose watercolour painting, soft translucent washes, wet-on-wet bleeding
 edges, visible paper grain, delicate pigment blooms, gentle light from the
-upper-left, light airy luminous palette, storybook diorama element, single
-isolated subject, transparent background, no hard outline, no cast shadow,
-no frame, no border, no text, centered with generous padding
+upper-left, light airy luminous palette, single isolated subject, plain white
+background, no hard outline, no cast shadow, no frame, no text, centered with
+generous padding
 ```
 
-Règles de cohérence :
-1. **Un seul modèle / une seule esthétique aquarelle** pour tout le set.
-2. **Même direction de lumière** (haut-gauche) sur TOUS les éléments.
-3. **Variantes saisonnières** : pars de la version **été** comme base, puis
-   **img2img / inpainting** en ne changeant QUE le feuillage / la couleur /
-   la neige → la **silhouette reste identique** → crossfade propre.
-4. Même **niveau de détrempe / mouillé** partout (ni trop sec sur l'un, ni trop
-   délavé sur l'autre).
-5. Fonds : laisse le **papier blanc** respirer autour du sujet (aide au détourage
-   et garde le côté aquarelle).
+Cohérence : **un seul modèle/esthétique**, **même lumière (haut-gauche)** partout,
+**même niveau de détrempe**. Outils gratuits : Leonardo.ai, Bing/Designer (DALL·E 3),
+Google ImageFX, ou **Draw Things** en local (Mac).
 
 ---
 
-## 2. Liste à générer (par couche, du fond vers l'avant)
+## 2. À générer — 2 à 3 par saison
 
-> 🎯 **Astuce volume** : seuls le **ciel**, le **grand arbre** et le **sol**
-> méritent 4 variantes peintes (fort impact). Les collines, animaux, buissons :
-> **1 seule version** (palette neutre), la saison se fera par **étalonnage
-> couleur dans le shader**. La météo (pluie/neige/pétales) = **particules en
-> code**, pas des images.
+> 🎯 **Minimum viable = 2/saison** (héros + premier plan). Le 3e (accent) est
+> optionnel mais ajoute de la vie. Les **ciels** ne sont PAS des assets (dégradé
+> procédural qui change selon la station).
 
-### Couche 0 — Ciel (opaque, plein cadre, 4 variantes)
-`sky-spring.jpg` / `sky-summer.jpg` / `sky-autumn.jpg` / `sky-winter.jpg`
-- Spring : `painted spring sky, soft pale blue, light scattered clouds`
-- Summer : `painted summer sky, bright clear blue, warm glow, few high clouds`
-- Autumn : `painted autumn sky, grey overcast, heavy moody clouds, wind`
-- Winter : `painted winter sky, pale cold white-grey, low soft light`
-- (suffixe sky : `, loose watercolour sky, soft washes, wide format` `--ar 16:9`,
-  **pas** transparent)
+### 🌸 Printemps (Primavera)
+- `spring-tree.png` — *a tree in spring blossom, pink and white buds, fresh light-green leaves* (héros)
+- `spring-fore.png` — *a clump of wildflowers and fresh spring grass* (premier plan)
+- `spring-accent.png` *(opt)* — *two small birds in flight*
 
-### Couche 1 — Collines lointaines (1 version, gradée par shader)
-`hills.png` — `distant rolling hills, soft hazy horizon line`
+### ☀️ Été (Estate)
+- `tree-summer.jpg` — **déjà là** ✅ (héros)
+- `summer-fore.png` — *lush summer grass with tiny flowers and a leafy bush*
+- `summer-accent.png` *(opt)* — *a soft glowing sun* (élément clair → blend screen)
 
-### Couche 2 — Le grand arbre HÉROS (4 variantes — le signal de saison)
-`tree-spring.png` — `large solitary oak tree covered in pink-white blossoms and buds`
-`tree-summer.png` — `large solitary oak tree with full lush green canopy`
-`tree-autumn.png` — `large solitary oak tree with orange red golden autumn leaves`
-`tree-winter.png` — `large solitary oak tree, bare branches, light snow on limbs`
-> ⚠️ Génère `tree-summer` d'abord, puis dérive les 3 autres en gardant **le même
-> tronc / la même position** (inpaint le feuillage seulement).
+### 🍂 Automne (Autunno)
+- `autumn-tree.png` — *a tree with orange, red and golden autumn foliage* (héros)
+- `autumn-fore.png` — *fallen autumn leaves and dry golden grass* (premier plan)
+- `autumn-accent.png` *(opt)* — *a calm standing deer*
 
-### Couche 3 — Faune (1 version chacun)
-`deer.png` — `a calm standing deer, side view`
-`birds.png` — `a small flock of little birds in flight`
-`rabbit.png` *(option)* — `a small rabbit sitting in grass`
+### ❄️ Hiver (Inverno)
+- `winter-tree.png` — *a bare winter tree, snow resting on the branches* (héros)
+- `winter-fore.png` — *snow-covered foreground with a few dry stems* (premier plan)
+- `winter-accent.png` *(opt)* — *a small evergreen fir tree dusted with snow*
 
-### Couche 4 — Flore / sol premier plan
-`ground-spring.png` / `ground-summer.png` / `ground-autumn.png` / `ground-winter.png`
-- Spring : `foreground meadow strip with wildflowers and fresh grass`
-- Summer : `foreground meadow strip, full green grass, tiny flowers`
-- Autumn : `foreground strip with fallen leaves, dry golden grass`
-- Winter : `foreground strip covered in snow, a few dry stems`
-`bush.png` *(1 version, gradée)* — `a leafy bush / fern clump`
-
-### Couche 5 — Surcouches météo *(optionnel — on peut le faire en code)*
-`sun.png` *(été)* — `a soft glowing sun, painted halo` (transparent)
-Pétales (printemps), pluie+vent (automne), neige (hiver) : **plutôt en
-particules JS/shader** (plus souple) → tu n'as PAS besoin de les générer.
+**Total** : 7 nouveaux (minimum) → 11 (avec accents). L'été réutilise l'existant.
 
 ---
 
-## 3. Placement / naming
+## 3. Placement
 
 ```
-public/
-  assets/
-    sky-spring.jpg   sky-summer.jpg   sky-autumn.jpg   sky-winter.jpg
-    hills.png
-    tree-spring.png  tree-summer.png  tree-autumn.png  tree-winter.png
-    deer.png         birds.png        rabbit.png
-    ground-spring.png ground-summer.png ground-autumn.png ground-winter.png
-    bush.png
-    sun.png
-  audio/
-    spring.mp3  summer.mp3  autumn.mp3  winter.mp3
+public/assets/
+  spring-tree.png   spring-fore.png   spring-accent.png
+  tree-summer.jpg   summer-fore.png   summer-accent.png
+  autumn-tree.png   autumn-fore.png   autumn-accent.png
+  winter-tree.png   winter-fore.png   winter-accent.png
 ```
-
-Les chemins seront branchés dans `lib/scene.ts` (créé au Step 1).
+Chaque fichier = une entrée dans `lib/scene.ts` (season, x le long du voyage,
+profondeur/parallax, scale).
 
 ---
 
-## 4. Audio — Vivaldi, Les Quatre Saisons
+## 4. Conseils
 
-Le scroll traverse les 4 concertos (un par saison). La musique pilote la waveform
-**et** l'intensité de distorsion (réaction aux coups d'archet).
-
-⚠️ Partition = domaine public, **enregistrements modernes = NON**. Utiliser une
-interprétation **libre** :
-- **Musopen.org** → **John Harrison / Wichita State University** (CC-BY) : la
-  référence. Crédit : « Performed by John Harrison, CC-BY ».
-- IMSLP / Wikimedia Commons → autres captations PD.
-
-```
-spring.mp3 = La Primavera (Allegro)
-summer.mp3 = L'Estate (Presto — l'orage)
-autumn.mp3 = L'Autunno (Allegro)
-winter.mp3 = L'Inverno (Allegro non molto)
-```
-~1–2 min par saison, bouclable, suffit pour commencer.
+- **Héros** des 4 saisons : garde un **cadrage/silhouette proche** d'un arbre à
+  l'autre → la traversée paraît cohérente (même « espèce » qui change de saison).
+- Lumière haut-gauche partout, palette désaturée/naturelle.
+- Premier plan = pensé pour être **gros et proche** (parallax rapide), héros au
+  milieu, et on garde des couches **lointaines pâles** (perspective atmosphérique).
 
 ---
 
-## 5. Checklist génération
+## 5. Audio — Vivaldi (libre)
 
-- [ ] Style bible collé sur chaque prompt
-- [ ] Lumière haut-gauche partout
-- [ ] `tree-summer` généré en 1er, 3 autres dérivés (même tronc/position)
-- [ ] Fond BLANC (sans détourage) pour les éléments pigment ; transparent
-      seulement pour les éléments clairs (soleil…)
-- [ ] Sujets centrés, entiers, avec marge
-- [ ] 4 ciels + 4 arbres + 4 sols ; le reste en 1 version
-- [ ] Audio Vivaldi (CC) récupéré
+Un mouvement par saison, crossfade au passage de station. Interprétation **libre**
+obligatoire : **Musopen** → John Harrison / Wichita State University (CC-BY).
+```
+public/audio/  spring.mp3  summer.mp3  autumn.mp3  winter.mp3
+```

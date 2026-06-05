@@ -6,7 +6,7 @@ import * as THREE from "three";
 import { SCENE_LAYERS, BG_TOP, BG_BOTTOM } from "@/lib/scene";
 import Layer from "./Layer";
 
-// Background plate: soft gradient (sky placeholder), rendered first.
+// Background plate: soft off-white gradient, rendered first.
 // The layers' multiply composites on top of this light background.
 function Background() {
   const { viewport } = useThree();
@@ -18,7 +18,11 @@ function Background() {
     []
   );
   return (
-    <mesh position={[0, 0, -0.01]} scale={[viewport.width, viewport.height, 1]} renderOrder={-10}>
+    <mesh
+      position={[0, 0, -0.01]}
+      scale={[viewport.width, viewport.height, 1]}
+      renderOrder={-10}
+    >
       <planeGeometry args={[1, 1]} />
       <shaderMaterial
         depthWrite={false}
@@ -43,12 +47,16 @@ function Background() {
   );
 }
 
-export default function Scene() {
+export default function Scene({
+  scrollRef,
+}: {
+  scrollRef: React.MutableRefObject<number>;
+}) {
   return (
     <>
       <Background />
       {SCENE_LAYERS.map((def, i) => (
-        <Layer key={def.id} def={def} order={i} />
+        <Layer key={def.id} def={def} order={i} scrollRef={scrollRef} />
       ))}
     </>
   );

@@ -26,11 +26,19 @@ const BASE_TILT_Y = 0.1;
 const LEAF_MIN_V = 0.32;
 // Chance to emit on each move (keeps it subtle).
 const LEAF_CHANCE = 0.28;
+// How far layers travel horizontally over the full scroll (in viewport widths, parallax=1).
+const SCROLL_SPAN = 1.8;
+// Zoom amplitude over the journey (zoom-in mid-way, back out at the end).
+const ZOOM_AMP = 0.35;
 
-type Props = { def: LayerDef; order: number };
+type Props = {
+  def: LayerDef;
+  order: number;
+  scrollRef: React.MutableRefObject<number>;
+};
 type Sampler = { data: Uint8ClampedArray; w: number; h: number };
 
-export default function Layer({ def, order }: Props) {
+export default function Layer({ def, order, scrollRef }: Props) {
   const { viewport, pointer } = useThree();
   const meshRef = useRef<THREE.Mesh>(null);
   const matRef = useRef<THREE.ShaderMaterial>(null);
@@ -99,10 +107,20 @@ export default function Layer({ def, order }: Props) {
     mat.uniforms.uTime.value += dt;
     mat.uniforms.uWet.value = water.textureRef.current;
 
+    const scroll = scrollRef.current;
+    // Horizontal camera travel: layers pan left, faster ones in front (parallax).
+    const panX = -scroll * (def.parallax ?? 1) * viewport.width * SCROLL_SPAN;
+    // Zoom in toward mid-journey, back out at the end.
+    const zoom = 1 + ZOOM_AMP * Math.sin(scroll * Math.PI);
+
     // INVERSE movement to the mouse (deeper = moves more).
     const amp = def.depth * 0.06;
-    mesh.position.x = baseX - mouse.current.x * amp * viewport.width;
-    mesh.position.y = baseY - mouse.current.y * amp * viewport.height;
+    const px = baseX + panX - mouse.current.x * amp * viewport.width;
+    const py = baseY - mouse.current.y * amp * viewport.height;
+
+    // Position + scale, zoomed about the origin (screen center).
+    mesh.position.set(px * zoom, py * zoom, 0);
+    mesh.scale.set((def.flipX ? -w : w) * zoom, h * zoom, 1);
 
     // "3D sheet" tilt, reacting to the mouse.
     mesh.rotation.y = BASE_TILT_Y + mouse.current.x * 0.12;
@@ -151,7 +169,7 @@ export default function Layer({ def, order }: Props) {
     <>
       <mesh
         ref={meshRef}
-        scale={[w, h, 1]}
+        scale={[def.flipX ? -w : w, h, 1]}
         renderOrder={order}
         onPointerMove={onMove}
         onPointerOut={() => setHover(false)}
@@ -163,6 +181,7 @@ export default function Layer({ def, order }: Props) {
           fragmentShader={layerFragmentShader}
           uniforms={uniforms}
           transparent
+          side={THREE.DoubleSide}
           blending={BLEND[def.blend ?? "multiply"]}
           depthWrite={false}
           depthTest={false}
