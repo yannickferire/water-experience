@@ -27,6 +27,52 @@ a {
   color: inherit;
 }
 
+/* Audio player control — bottom right (click to play/pause) */
+.player {
+  position: fixed;
+  right: clamp(1.2rem, 3vw, 2.4rem);
+  bottom: clamp(1.2rem, 3vh, 2rem);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  text-align: right;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.66rem;
+  line-height: 1.45;
+  /* always reserve 2 lines so the dot stays put whether the label is 1 or 2 lines */
+  min-height: 2.9em;
+  letter-spacing: 0.02em;
+  color: var(--fg);
+}
+.player__dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  box-sizing: border-box;
+}
+.player.is-playing .player__dot {
+  background: currentColor;
+  animation: player-pulse 1.7s ease-in-out infinite;
+}
+.player__label b {
+  font-weight: 700;
+}
+.player__label--off {
+  opacity: 0.5;
+}
+@keyframes player-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.7); }
+}
+
 /* Seasonal text block — fixed on the left, from 30% top to 20% bottom */
 .season-text {
   position: fixed;

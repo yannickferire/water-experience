@@ -1,156 +1,170 @@
-# Water Experience — Specs & fonctionnement
+# Water Experience — Specs & how it works
 
-Expérience WebGL : un **diorama aquarelle** des **4 saisons** qu'on traverse
-horizontalement au scroll, avec un **effet d'eau** au survol et un texte
-contextuel. Inspiré du David Whyte Experience (Immersive Garden), reconstruit
-avec nos propres assets et notre propre code.
+A WebGL experience: a **watercolor diorama** of the **four seasons** that you
+travel through horizontally on scroll, with a **water effect** on hover and
+contextual text + music. Inspired by the David Whyte Experience (Immersive
+Garden), rebuilt with our own assets and code.
 
 ---
 
 ## Stack
 
-| Rôle | Techno |
+| Role | Tech |
 |---|---|
-| Framework | Next.js (App Router), client-only pour l'expérience |
-| Rendu 3D | Three.js via React Three Fiber (`@react-three/fiber`, `@react-three/drei`) |
-| Scroll lissé | Lenis |
-| Shaders | GLSL inline (string TS) |
-| Typo | `Caudex` (texte) + `Inter` (UI) via `next/font` |
-| Déploiement | Vercel |
+| Framework | Next.js (App Router), client-only for the experience |
+| 3D rendering | Three.js via React Three Fiber (`@react-three/fiber`, `@react-three/drei`) |
+| Smooth scroll | Lenis |
+| Shaders | inline GLSL (TS strings) |
+| Type | `Caudex` (text) + `Inter` (UI) via `next/font` |
+| Deploy | Vercel |
 
 ---
 
-## Architecture des fichiers
+## File architecture
 
 ```
 app/
-  layout.tsx        fonts + montage du custom cursor
-  page.tsx          import client-only de l'Experience (no SSR)
-  globals.css       reset, bloc texte, custom cursor
+  layout.tsx        fonts + mounts the custom cursor
+  page.tsx          client-only import of Experience (no SSR)
+  globals.css       reset, text block, custom cursor
 components/
-  CustomCursor.tsx  curseur custom (anneau + point, double traîne)
-  SeasonText.tsx    bloc de texte fixe à gauche (défile au scroll)
+  CustomCursor.tsx  custom cursor (ring + dot, dual trailing)
+  SeasonText.tsx    fixed text block on the left (scrolls on scroll)
+  SeasonAudio.tsx   one looping track per season, crossfaded on scroll
   Experience/
-    Experience.tsx  coquille : <Canvas>, Lenis -> scrollRef, hauteur scrollable
-    Scene.tsx       fond (ciel par saison) + map des couches
-    Layer.tsx       une couche du diorama (mesh + shader + interactions)
-    shaders.ts      vertex/fragment de la couche (reveal, distorsion, alpha)
-    useWaterField.ts simulation d'eau GPU (FBO ping-pong) par couche
-    LeafEmitter.tsx  particules « feuilles » au survol du feuillage
+    Experience.tsx  shell: <Canvas>, Lenis -> scrollRef, scrollable height
+    Scene.tsx       background (sky per season) + layer map
+    Layer.tsx       one diorama layer (mesh + shader + interactions)
+    shaders.ts      layer vertex/fragment (reveal, distortion, alpha)
+    useWaterField.ts GPU water simulation (ping-pong FBO) per layer
+    LeafEmitter.tsx  "leaf" particles when hovering foliage
 lib/
-  scene.ts          description data-driven des couches (LayerDef[])
-  seasonText.ts     textes par saison
-  cursor.ts         pont event WebGL -> DOM (état hover du curseur)
+  scene.ts          data-driven layer description (LayerDef[])
+  seasonText.ts     per-season text
+  cursor.ts         WebGL -> DOM event bridge (cursor hover state)
 ```
 
-Principe transverse : **data-driven**. Ajouter un élément = une entrée dans
-`lib/scene.ts` (aucune logique à toucher).
+Cross-cutting principle: **data-driven**. Adding an element = one entry in
+`lib/scene.ts` (no logic to touch).
 
 ---
 
-## Fonctionnalités & specs
+## Features & specs
 
-### 1. Diorama en couches (parallax horizontal + zoom)
-- Chaque couche est un plan texturé, positionné le long d'un axe X (`scene.ts`).
-- Le scroll (Lenis, lissé) donne un `scrollRef` 0..1 qui **pan** les couches vers
-  la gauche : `panX = -scroll * parallax * viewportW * SCROLL_SPAN`.
-  Plus une couche est « devant » (`parallax` élevé), plus elle bouge vite.
-- 4 **stations** (saisons) à `x = s * 4.8`, s ∈ {0, ⅓, ⅔, 1}.
-- **Zoom** doux au milieu du parcours : `zoom = 1 + 0.18·sin(scroll·π)`.
-- Léger **parallax inverse à la souris** (les couches se décalent à l'opposé).
+### 1. Layered diorama (horizontal parallax + zoom)
+- Each layer is a textured plane positioned along an X axis (`scene.ts`).
+- Scroll (Lenis, smoothed) gives a `scrollRef` 0..1 that **pans** the layers
+  left: `panX = -scroll * parallax * viewportW * SCROLL_SPAN`. The more
+  "foreground" a layer is (higher `parallax`), the faster it moves.
+- 4 **stations** (seasons) at `x = s * 4.8`, s ∈ {0, ⅓, ⅔, 1}.
+- Gentle **zoom** mid-journey: `zoom = 1 + 0.18·sin(scroll·π)`.
+- Subtle **inverse mouse parallax** (layers shift opposite to the cursor).
 
-### 2. Ciel par saison
-`Scene.tsx` interpole un dégradé (haut/bas) entre 4 palettes selon le scroll
-(printemps → été → automne → hiver). Aucun asset, 100 % procédural.
+### 2. Sky per season
+`Scene.tsx` interpolates a gradient (top/bottom) between 4 palettes based on
+scroll (spring → summer → autumn → winter). No asset, fully procedural.
 
-### 3. Effet d'eau au survol (le cœur)
-Simulé par couche dans un **FBO ping-pong** (`useWaterField.ts`, 256²) :
-- **dépôt** rond le long du déplacement souris (le curseur est la tête) ;
-- **diffusion** (l'eau s'étale) ;
-- **absorption** : `HOLD` 1 s sans rien, puis **fondu** (`ABSORB_TAU`) **+
-  rétrécissement** (`ERODE`) → la flaque est « bue » par le papier ;
-- **largeur** de trace pilotée par la **vitesse** du curseur (`RADIUS_MIN/MAX`) ;
-- **optimisation** : la sim d'une couche est **mise en pause** ~7 s après la
-  dernière interaction → seule la couche survolée tourne.
+### 3. Water effect on hover (the core)
+Simulated per layer in a **ping-pong FBO** (`useWaterField.ts`, 256²):
+- **round deposit** along the cursor path (the cursor is the head);
+- **diffusion** (water spreads);
+- **absorption**: `HOLD` 1s with nothing, then **fade** (`ABSORB_TAU`) **+
+  shrink** (`ERODE`) → the puddle is "soaked up" by the paper;
+- trace **width** driven by cursor **speed** (`RADIUS_MIN/MAX`);
+- **optimization**: a layer's sim is **paused** ~7s after the last interaction →
+  only the hovered layer runs.
 
-La couche **échantillonne** ce champ (`shaders.ts`) :
-- révèle l'aquarelle (pigment au repos `baseOpacity` → 100 % sous l'eau) ;
-- bords **organiques** uniquement loin du centre (warp ∝ faiblesse de l'eau) ;
-- **distorsion** = léger décalage d'image basse-fréquence animé, **confiné** à la
-  zone mouillée **et** à l'intérieur de la forme (silhouette/tronc figés).
+The layer **samples** this field (`shaders.ts`):
+- reveals the watercolor (rest pigment `baseOpacity` → 100% where wet);
+- **organic** edges only away from the center (warp ∝ how faint the water is);
+- **distortion** = a subtle low-frequency animated image displacement, **confined**
+  to the wet area **and** to the inside of the shape (silhouette/trunk stay fixed).
 
-### 4. Compositing alpha + base papier
-- `alpha` = « couverture » (1 - papier) → la **forme est opaque** (couvre ce qui
-  est derrière), le **papier blanc autour est transparent**.
-- À l'intérieur : **base papier texturée** + l'aquarelle par-dessus.
-- **Masque d'intérieur érodé** : les structures fines (tronc, branches) ne se
-  distordent pas → elles restent droites ; seules les grandes masses ondulent.
+### 4. Alpha compositing + paper base
+- `alpha` = "coverage" (1 - paper) → the **shape is opaque** (covers what's
+  behind it), the **white paper around it is transparent**.
+- Inside: a **textured paper base** + the watercolor on top.
+- **Eroded interior mask**: thin structures (trunk, branches) don't distort →
+  they stay straight; only large masses ripple.
 
-### 5. Apparition au chargement (reveal)
-`uAppear` (par couche, étagé selon la profondeur) :
-1. la **forme papier** apparaît d'abord ;
-2. puis l'**aquarelle** se révèle en **vagues de gouttes** (3 couches de bruit
-   décalées et mélangées — méthode décrite par le studio original).
+### 5. Reveal on load
+`uAppear` (per layer, staggered by depth):
+1. the **paper shape** appears first;
+2. then the **watercolor** reveals in **waves of droplets** (3 staggered, blended
+   noise layers — the method described by the original studio).
 
-### 6. Particules « feuilles »
-Au survol du **feuillage** (vert, partie haute), `LeafEmitter.tsx` émet de
-petites feuilles grises qui tournoient et retombent (pool GPU de 600 points,
-blend multiply). Émission discrète (probabiliste).
+### 6. Leaf particles
+When hovering the **foliage** (green, upper part), `LeafEmitter.tsx` emits small
+gray leaves that spin and fall (GPU pool of 600 points, multiply blend). Emission
+is sparse (probabilistic).
 
 ### 7. Custom cursor
-`CustomCursor.tsx` : un **point** qui suit la souris avec retard + un **anneau**
-qui traîne davantage (clampé pour que le point reste dedans). Au survol d'une
-image WebGL (event `cursor.ts`), l'anneau **rétrécit, devient blanc opaque** et
-le point passe en blanc (transition CSS). Desktop uniquement.
+`CustomCursor.tsx`: a **dot** trailing the mouse + a **ring** trailing further
+(clamped so the dot stays inside). Over a WebGL image (event via `cursor.ts`),
+the ring **shrinks, turns opaque white** and the dot turns white (CSS
+transition). Desktop only.
 
-### 8. Texte par saison
-`SeasonText.tsx` : bloc **fixe à gauche** (30 % haut → 20 % bas). Les saisons
-sont empilées et **défilent** dans cette fenêtre au scroll. Effet « verre » **par
-ligne** selon sa position : une ligne près du haut/bas est **floutée + élargie +
-fondue** ; au centre elle est nette. La 1ʳᵉ saison a un padding pour qu'au
-chargement (avant scroll) aucun texte ne soit dans la zone d'effet.
+### 8. Per-season text
+`SeasonText.tsx`: a **fixed block on the left** (30% top → 20% bottom). Seasons
+are stacked and **scroll** through this window. A glass-like effect is applied
+**per line** based on its position: a line near the top/bottom is **blurred +
+slightly widened + faded**; centered it's sharp. The first season has top padding
+so that on load (before scrolling) no text sits in the effect zone.
+
+### 9. Per-season music
+`SeasonAudio.tsx`: one looping track per season, **crossfaded** on scroll.
+- Streaming `HTMLAudioElement` (no full decode → low memory).
+- Only `spring` is preloaded; the others **load lazily** when we get near them.
+- Inactive tracks are **paused** (no CPU / no network).
+- Autoplay is **unlocked on the first user gesture** (browser policy) → music
+  starts on the first scroll/click.
 
 ---
 
-## Réglages clés (où toucher)
+## Key tuning knobs (where to touch)
 
-| Effet | Fichier | Constante |
+| Effect | File | Constant |
 |---|---|---|
-| Espacement des stations / vitesse pan | `Layer.tsx` | `SCROLL_SPAN` |
-| Zoom du voyage | `Layer.tsx` | `ZOOM_AMP` |
-| Longueur de scroll | `Experience.tsx` | hauteur `…vh` |
-| Absorption de l'eau | `useWaterField.ts` | `HOLD`, `ABSORB_TAU`, `ERODE` |
-| Largeur de trace | `useWaterField.ts` | `RADIUS_MIN/MAX`, `SPEED_*` |
-| Force/forme distorsion | `scene.ts` (`distortion`) · `shaders.ts` | |
-| Reveal (durée/étagement) | `Layer.tsx` (`/2.6`, `order*0.3`) | |
-| Effet verre du texte | `SeasonText.tsx` | `EDGE`, blur `e*2.5`, scaleX `e*0.025` |
-| Palettes de ciel | `Scene.tsx` | `SKY` |
-| Contenu / positions | `lib/scene.ts`, `lib/seasonText.ts` | |
+| Station spacing / pan speed | `Layer.tsx` | `SCROLL_SPAN` |
+| Journey zoom | `Layer.tsx` | `ZOOM_AMP` |
+| Scroll length | `Experience.tsx` | `…vh` height |
+| Water absorption | `useWaterField.ts` | `HOLD`, `ABSORB_TAU`, `ERODE` |
+| Trace width | `useWaterField.ts` | `RADIUS_MIN/MAX`, `SPEED_*` |
+| Distortion strength/shape | `scene.ts` (`distortion`) · `shaders.ts` | |
+| Reveal (duration/stagger) | `Layer.tsx` | `/2.6`, `order*0.3` |
+| Text glass effect | `SeasonText.tsx` | `EDGE`, blur `e*2.5`, scaleX `e*0.025` |
+| Sky palettes | `Scene.tsx` | `SKY` |
+| Audio crossfade / prefetch | `SeasonAudio.tsx` | `FADE`, `PREFETCH` |
+| Content / positions | `lib/scene.ts`, `lib/seasonText.ts` | |
 
 ---
 
-## Perfs
+## Performance
 
-- Les couches **hors écran** sont **frustum-culled** → leur shader ne tourne pas.
-- La **sim d'eau** est **en pause** sur les couches non survolées.
-- DPR plafonné `[1, 2]`.
+- **Off-screen layers are frustum-culled** → their shader doesn't run.
+- The **water sim is paused** on non-hovered layers.
+- Audio **streams** and loads lazily; inactive tracks are paused.
+- DPR capped at `[1, 2]`.
 
 ---
 
-## Améliorable / connu
+## Improvable / known
 
-- **Espace colorimétrique** : les shaders bruts échantillonnent du sRGB sans
-  décodage et n'encodent pas la sortie (« juste par accident » visuellement).
-  À traiter proprement si on ajoute du grading ou que les couleurs dérivent.
-- **Audio Vivaldi** : pas encore intégré (waveform réactive + crossfade par
-  saison). Voir `ASSETS.md` pour la source libre (Musopen / John Harrison CC-BY).
-- **Automne & hiver** : 1 seul élément chacun (manque un 2ᵉ asset de 1er plan).
-- **Étalement « uniquement derrière »** : la diffusion est isotrope ; un
-  étalement directionnel (anisotrope, biaisé par le mouvement) serait plus fidèle.
-- **Bruit baké** : le studio bake ses bruits en texture (perf). On les calcule en
-  live ; OK ici, mais à envisager si le nombre de couches augmente.
-- **Mobile / responsive** : pensé desktop. Le custom cursor et certains réglages
-  sont désactivés/non optimisés sur tactile ; le cadrage des couches mériterait
-  des valeurs responsives.
-- **Sampler CPU par couche** : chaque couche lit ses pixels via un canvas (pour
-  le hover/particules). Pour de très grandes images, surveiller la mémoire.
+- **Color space**: raw shaders sample sRGB without decoding and don't encode the
+  output ("accidentally correct" visually). Worth fixing if we add grading or
+  colors drift.
+- **Reactive waveform**: the music plays but isn't yet visualized; an
+  `AnalyserNode` (via `MediaElementSource`) could drive a waveform and feed the
+  shader (e.g., distortion reacting to the strings).
+- **Autumn & winter**: a single element each (missing a 2nd foreground asset).
+- **"Spread only behind"**: diffusion is isotropic; a directional (anisotropic,
+  movement-biased) spread would be more faithful.
+- **Baked noise**: the studio bakes its noise into a texture (perf). We compute
+  it live; fine here, but worth considering if the layer count grows.
+- **Mobile / responsive**: built desktop-first. The custom cursor and some
+  values are disabled/unoptimized on touch; layer framing would benefit from
+  responsive values.
+- **Per-layer CPU sampler**: each layer reads its pixels via a canvas (for
+  hover/particles). Watch memory for very large images.
+- **Audio file weight**: re-encode to ~96–128 kbps and/or trim to a loopable
+  ~60–90s segment (e.g. `ffmpeg -i in.mp3 -b:a 112k -t 90 out.mp3`).

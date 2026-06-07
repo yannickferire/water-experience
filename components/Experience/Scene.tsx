@@ -51,7 +51,7 @@ function Background({ scrollRef }: { scrollRef: ScrollRef }) {
   return (
     <mesh
       position={[0, 0, -0.01]}
-      scale={[viewport.width, viewport.height, 1]}
+      scale={[viewport.width * 1.04, viewport.height * 1.04, 1]}
       renderOrder={-10}
     >
       <planeGeometry args={[1, 1]} />

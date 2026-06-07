@@ -6,6 +6,8 @@ import Lenis from "lenis";
 import { BG_BOTTOM } from "@/lib/scene";
 import Scene from "./Scene";
 import SeasonText from "@/components/SeasonText";
+import SeasonAudio from "@/components/SeasonAudio";
+import SeasonPlayer from "@/components/SeasonPlayer";
 
 // WebGL shell: fixed full-screen canvas. Scroll (Lenis, smoothed) drives a
 // virtual progress 0..1 that translates the parallax layers (camera travel).
@@ -36,16 +38,10 @@ export default function Experience() {
 
   return (
     <>
-      <main
-        style={{
-          position: "fixed",
-          inset: 0,
-          width: "100vw",
-          height: "100vh",
-          background: BG_BOTTOM,
-        }}
-      >
+      <main style={{ position: "fixed", inset: 0, background: BG_BOTTOM }}>
         <Canvas dpr={[1, 2]} camera={{ position: [0, 0, 5], fov: 50 }} gl={{ antialias: true }}>
+          {/* opaque clear color so screen edges never show a transparent seam */}
+          <color attach="background" args={[BG_BOTTOM]} />
           <Suspense fallback={null}>
             <Scene scrollRef={scrollRef} />
           </Suspense>
@@ -53,6 +49,8 @@ export default function Experience() {
       </main>
 
       <SeasonText scrollRef={scrollRef} />
+      <SeasonAudio scrollRef={scrollRef} />
+      <SeasonPlayer />
 
       {/* Scroll height that drives the camera travel (canvas is fixed above). */}
       <div style={{ height: "440vh" }} aria-hidden />

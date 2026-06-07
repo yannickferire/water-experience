@@ -27,6 +27,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# audio source backups (kept locally by scripts/optimize-audio.mjs)
+public/audio/*.orig.mp3
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
