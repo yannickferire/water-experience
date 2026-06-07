@@ -1,13 +1,12 @@
 import type { Metadata } from "next";
-import { Cormorant_Garamond, Inter } from "next/font/google";
+import { Caudex, Inter } from "next/font/google";
 import CustomCursor from "@/components/CustomCursor";
 import "./globals.css";
 
-// Placeholder fonts — to be swapped for the final ones later.
-// Elegant serif for the poetic text, sans for the UI.
-const serif = Cormorant_Garamond({
+// Serif for the poetic text, sans for the UI.
+const serif = Caudex({
   subsets: ["latin"],
-  weight: ["300", "400", "500"],
+  weight: ["400", "700"],
   variable: "--font-serif",
 });
 

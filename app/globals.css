@@ -27,6 +27,47 @@ a {
   color: inherit;
 }
 
+/* Seasonal text block — fixed on the left, from 30% top to 20% bottom */
+.season-text {
+  position: fixed;
+  left: clamp(1.5rem, 5vw, 4rem);
+  top: 30vh;
+  bottom: 20vh;
+  width: min(26vw, 330px);
+  z-index: 20;
+  pointer-events: none;
+  /* no clipping — out-of-window lines are hidden via per-line opacity (-> 0),
+     which avoids ugly hard cuts at the edges and lets widened text breathe. */
+  overflow: visible;
+  color: var(--fg);
+  font-family: var(--font-serif), Georgia, serif;
+}
+/* fade the text in/out at the top and bottom of the window */
+.season-text__scroll {
+  position: relative;
+  will-change: transform;
+}
+.season-text__block {
+  /* each season fills the window height (100% - 30% - 20% = 50vh) */
+  height: 50vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+/* First season starts lower (padding above) so on load, before scrolling,
+   no text sits in the top fade/blur zone — the effect appears once you scroll. */
+.season-text__block:first-child {
+  justify-content: flex-start;
+  padding-top: 26%;
+}
+.season-text__block p {
+  font-size: clamp(1.3rem, 2.2vw, 1.85rem);
+  line-height: 1.5;
+  margin-bottom: 0.5rem;
+  transform-origin: left center;
+  will-change: transform, filter, opacity;
+}
+
 /* Custom cursor (desktop / fine pointer only) */
 .cursor {
   position: fixed;

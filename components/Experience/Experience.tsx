@@ -5,6 +5,7 @@ import { Canvas } from "@react-three/fiber";
 import Lenis from "lenis";
 import { BG_BOTTOM } from "@/lib/scene";
 import Scene from "./Scene";
+import SeasonText from "@/components/SeasonText";
 
 // WebGL shell: fixed full-screen canvas. Scroll (Lenis, smoothed) drives a
 // virtual progress 0..1 that translates the parallax layers (camera travel).
@@ -50,6 +51,8 @@ export default function Experience() {
           </Suspense>
         </Canvas>
       </main>
+
+      <SeasonText scrollRef={scrollRef} />
 
       {/* Scroll height that drives the camera travel (canvas is fixed above). */}
       <div style={{ height: "440vh" }} aria-hidden />
