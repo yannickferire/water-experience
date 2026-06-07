@@ -27,6 +27,55 @@ a {
   color: inherit;
 }
 
+/* "Scroll to explore" hint — below the text block */
+.scroll-hint {
+  position: fixed;
+  left: clamp(1.5rem, 5vw, 4rem);
+  bottom: 20vh;
+  z-index: 25;
+  pointer-events: none;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+  color: var(--fg);
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 1.6s ease, transform 1.6s ease;
+}
+.scroll-hint.is-shown {
+  opacity: 1;
+  transform: translateY(0);
+}
+.scroll-hint.is-hidden {
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+.scroll-hint span {
+  position: relative;
+  display: inline-block;
+  padding-bottom: 0.5rem;
+}
+.scroll-hint span::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: currentColor;
+  /* retract right -> refill from left -> hold full ~2s -> repeat */
+  transform: scaleX(1);
+  transform-origin: right;
+  animation: scroll-line 3s cubic-bezier(0.76, 0, 0.24, 1) infinite;
+}
+@keyframes scroll-line {
+  0% { transform: scaleX(1); transform-origin: right center; }
+  18% { transform: scaleX(0); transform-origin: right center; }
+  18.01% { transform: scaleX(0); transform-origin: left center; }
+  36% { transform: scaleX(1); transform-origin: left center; }
+  100% { transform: scaleX(1); transform-origin: left center; }
+}
+
 /* Audio player control — bottom right (click to play/pause) */
 .player {
   position: fixed;

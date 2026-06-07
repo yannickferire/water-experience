@@ -30,11 +30,25 @@ export default function SeasonText({
     };
 
     let id = 0;
+    const t0 = performance.now();
+    const INTRO_DELAY = 100; // ms before the rise starts
+    const INTRO_MS = 2200; // intro rise duration (slower)
+    const INTRO_RISE = 0.9; // how far below it starts (in window-heights)
+
     const tick = () => {
       const p = scrollRef.current;
       const winH = window.innerHeight * 0.5; // window height (100% - 30% - 20%)
       const span = (SEASON_TEXTS.length - 1) * winH;
-      const ty = -p * span;
+
+      // Intro: the column starts pushed DOWN and rises into place. easeOutExpo =
+      // fast off the line, long slow glide to a stop. The per-line glass effect
+      // below shows naturally as the text sweeps up through the bottom zone.
+      const intro = Math.min(
+        1,
+        Math.max(0, (performance.now() - t0 - INTRO_DELAY) / INTRO_MS)
+      );
+      const eased = intro >= 1 ? 1 : 1 - Math.pow(2, -10 * intro);
+      const ty = -p * span + (1 - eased) * winH * INTRO_RISE;
 
       const col = columnRef.current;
       if (col) col.style.transform = `translateY(${ty}px)`;

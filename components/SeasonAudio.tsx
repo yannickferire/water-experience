@@ -55,15 +55,19 @@ export default function SeasonAudio({
       const pos = scrollRef.current * (N - 1); // position in "stations"
       // bias the switch later (+0.3) so the next track triggers closer to its station.
       const active = Math.max(0, Math.min(N - 1, Math.floor(pos + 0.3)));
-      const playing = unlocked && !userPaused;
 
-      // Notify the player UI when the state changes.
-      if (playing !== prevPlaying || active !== prevActive) {
-        prevPlaying = playing;
+      // intent = we WANT to play; uiPlaying = the element is ACTUALLY playing
+      // (play() can be blocked by autoplay policy, so the UI must reflect reality).
+      const intent = unlocked && !userPaused;
+      const uiPlaying = !userPaused && !audios[active].paused;
+
+      // Notify the player UI when the real state changes.
+      if (uiPlaying !== prevPlaying || active !== prevActive) {
+        prevPlaying = uiPlaying;
         prevActive = active;
         window.dispatchEvent(
           new CustomEvent(AUDIO_EVENT, {
-            detail: { playing, season: active },
+            detail: { playing: uiPlaying, season: active },
           })
         );
       }
@@ -71,9 +75,9 @@ export default function SeasonAudio({
       for (let i = 0; i < N; i++) {
         const a = audios[i];
         const near = Math.abs(pos - i) < PREFETCH;
-        const target = playing && i === active ? 1 : 0;
+        const target = intent && i === active ? 1 : 0;
 
-        if (playing && near) {
+        if (intent && near) {
           ensure(i);
           if (a.paused) a.play().catch(() => {}); // pre-play silently (decode ahead)
         }

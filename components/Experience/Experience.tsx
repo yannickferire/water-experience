@@ -8,6 +8,7 @@ import Scene from "./Scene";
 import SeasonText from "@/components/SeasonText";
 import SeasonAudio from "@/components/SeasonAudio";
 import SeasonPlayer from "@/components/SeasonPlayer";
+import ScrollHint from "@/components/ScrollHint";
 
 // WebGL shell: fixed full-screen canvas. Scroll (Lenis, smoothed) drives a
 // virtual progress 0..1 that translates the parallax layers (camera travel).
@@ -49,6 +50,7 @@ export default function Experience() {
       </main>
 
       <SeasonText scrollRef={scrollRef} />
+      <ScrollHint scrollRef={scrollRef} />
       <SeasonAudio scrollRef={scrollRef} />
       <SeasonPlayer />
 
