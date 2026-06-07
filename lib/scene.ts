@@ -27,6 +27,8 @@ export type LayerDef = {
   parallax?: number;
   /** Mirror the layer horizontally (cheap variety when reusing an asset). */
   flipX?: boolean;
+  /** Give the layer a 3D sheet tilt that reacts to the mouse (else flat 2D). */
+  tilt?: boolean;
 };
 
 // Horizontal journey of "stations" (seasons) spread along X. Scroll pans the
@@ -38,52 +40,49 @@ export type LayerDef = {
 // Listed back -> front (array index = render order). Winter station: add when
 // the asset exists.
 export const SCENE_LAYERS: LayerDef[] = [
-  // 🌸 Spring (x 0)
+  // 🌸 Spring (x 0) — the first hero gets the 3D tilt; everything else is flat.
   {
-    id: "spring-far",
-    src: "/assets/tree-spring.jpg",
-    depth: 0.2, scale: 0.4, x: -0.45, y: 0.18,
-    parallax: 0.85, baseOpacity: 0.24, distortion: 0.01, flipX: true,
+    id: "spring-ducks",
+    src: "/assets/ducks-spring.jpg",
+    depth: 0.5, scale: 0.78, x: 0.45, y: -0.02,
+    parallax: 1.0, baseOpacity: 0.6, distortion: 0.016,
   },
   {
     id: "spring-tree",
     src: "/assets/tree-spring.jpg",
-    depth: 0.6, scale: 0.8, x: 0, y: -0.04,
-    parallax: 1.0, baseOpacity: 0.5, distortion: 0.018, particles: true,
-  },
-  {
-    id: "spring-ducks",
-    src: "/assets/ducks-spring.jpg",
-    depth: 0.9, scale: 0.62, x: 0.15, y: -0.3,
-    parallax: 1.12, baseOpacity: 0.6, distortion: 0.014,
+    depth: 0.85, scale: 0.88, x: -0.08, y: 0,
+    parallax: 1.15, baseOpacity: 0.5, distortion: 0.02, particles: true,
+    tilt: true,
   },
 
-  // ☀️ Summer (x 1.8)
+  // ☀️ Summer (x 1.6) — sunflowers as a foreground scene (like the ducks)
   {
-    id: "summer-far",
-    src: "/assets/tree-summer.jpg",
-    depth: 0.2, scale: 0.4, x: 1.4, y: 0.18,
-    parallax: 0.85, baseOpacity: 0.24, distortion: 0.01, flipX: true,
+    id: "summer-sunflower",
+    src: "/assets/sunflower-summer.jpg",
+    depth: 0.5, scale: 0.78, x: 2.05, y: -0.02,
+    parallax: 1.0, baseOpacity: 0.6, distortion: 0.016,
   },
   {
     id: "summer-tree",
     src: "/assets/tree-summer.jpg",
-    depth: 0.6, scale: 0.82, x: 1.8, y: -0.04,
-    parallax: 1.0, baseOpacity: 0.5, distortion: 0.018, particles: true,
+    depth: 0.85, scale: 0.85, x: 1.6, y: 0,
+    parallax: 1.15, baseOpacity: 0.5, distortion: 0.02, particles: true,
   },
 
-  // 🍂 Autumn (x 3.6)
-  {
-    id: "autumn-far",
-    src: "/assets/tree-autumn.jpg",
-    depth: 0.2, scale: 0.4, x: 3.2, y: 0.18,
-    parallax: 0.85, baseOpacity: 0.24, distortion: 0.01, flipX: true,
-  },
+  // 🍂 Autumn (x 3.2) — single tree (no duplicate)
   {
     id: "autumn-tree",
     src: "/assets/tree-autumn.jpg",
-    depth: 0.6, scale: 0.82, x: 3.6, y: -0.04,
-    parallax: 1.0, baseOpacity: 0.5, distortion: 0.018, particles: true,
+    depth: 0.85, scale: 0.85, x: 3.2, y: 0,
+    parallax: 1.0, baseOpacity: 0.5, distortion: 0.02, particles: true,
+  },
+
+  // ❄️ Winter (x 4.8)
+  {
+    id: "winter-tree",
+    src: "/assets/tree-winter.jpg",
+    depth: 0.85, scale: 0.85, x: 4.8, y: 0,
+    parallax: 1.0, baseOpacity: 0.5, distortion: 0.02,
   },
 ];
 

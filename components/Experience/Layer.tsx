@@ -10,12 +10,6 @@ import LeafEmitter, { type EmitReq } from "./LeafEmitter";
 import { useWaterField } from "./useWaterField";
 import { setCursorHover } from "@/lib/cursor";
 
-const BLEND: Record<string, THREE.Blending> = {
-  multiply: THREE.MultiplyBlending,
-  normal: THREE.NormalBlending,
-  screen: THREE.AdditiveBlending, // (light-on-dark: handled later)
-};
-
 const damp = THREE.MathUtils.damp;
 
 // Static tilt: makes the layer read like a drawing sheet in 3D.
@@ -27,7 +21,7 @@ const LEAF_MIN_V = 0.32;
 // Chance to emit on each move (keeps it subtle).
 const LEAF_CHANCE = 0.28;
 // How far layers travel horizontally over the full scroll (in viewport widths, parallax=1).
-const SCROLL_SPAN = 1.8;
+const SCROLL_SPAN = 2.4;
 // Zoom amplitude over the journey (subtle, so stations stay roughly centered).
 const ZOOM_AMP = 0.18;
 
@@ -130,9 +124,11 @@ export default function Layer({ def, order, scrollRef }: Props) {
     mesh.position.set(px * zoom, py * zoom, 0);
     mesh.scale.set((def.flipX ? -w : w) * zoom, h * zoom, 1);
 
-    // "3D sheet" tilt, reacting to the mouse.
-    mesh.rotation.y = BASE_TILT_Y + mouse.current.x * 0.12;
-    mesh.rotation.x = BASE_TILT_X - mouse.current.y * 0.12;
+    // "3D sheet" tilt only on flagged layers; the rest stay flat (parallax only).
+    if (def.tilt) {
+      mesh.rotation.y = BASE_TILT_Y + mouse.current.x * 0.12;
+      mesh.rotation.x = BASE_TILT_X - mouse.current.y * 0.12;
+    }
   });
 
   const setHover = (over: boolean) => {
@@ -190,7 +186,7 @@ export default function Layer({ def, order, scrollRef }: Props) {
           uniforms={uniforms}
           transparent
           side={THREE.DoubleSide}
-          blending={BLEND[def.blend ?? "multiply"]}
+          blending={THREE.NormalBlending}
           depthWrite={false}
           depthTest={false}
           toneMapped={false}

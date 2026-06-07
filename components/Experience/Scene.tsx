@@ -8,13 +8,14 @@ import Layer from "./Layer";
 
 type SeasonRef = React.MutableRefObject<number>;
 
-// Sky palettes per station [top, bottom], at scroll positions 0, 0.5, 1.
+// Sky palettes per station [top, bottom], at scroll positions 0, 1/3, 2/3, 1.
 const SKY: [string, string][] = [
   ["#e9eff2", "#eef0e2"], // spring — pale blue / fresh green-cream
   ["#dfeaf3", "#f3efe2"], // summer — blue / warm cream
   ["#ece2d4", "#ecdcc4"], // autumn — soft grey-tan
+  ["#e6ecf2", "#eef1f4"], // winter — cold pale blue / white-grey
 ];
-const SKY_AT = [0, 0.5, 1];
+const SKY_AT = [0, 1 / 3, 2 / 3, 1];
 
 // Background plate: gradient sky that shifts between stations as you scroll.
 function Background({ scrollRef }: { scrollRef: SeasonRef }) {
@@ -36,7 +37,7 @@ function Background({ scrollRef }: { scrollRef: SeasonRef }) {
     const s = scrollRef.current;
     let tr = 0, tg = 0, tb = 0, br = 0, bg = 0, bb = 0, wsum = 0;
     for (let i = 0; i < SKY.length; i++) {
-      const w = Math.max(0, 1 - Math.abs(s - SKY_AT[i]) / 0.5);
+      const w = Math.max(0, 1 - Math.abs(s - SKY_AT[i]) / (1 / 3));
       if (w <= 0) continue;
       wsum += w;
       tr += w * tops[i].r; tg += w * tops[i].g; tb += w * tops[i].b;

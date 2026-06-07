@@ -52,7 +52,7 @@ export default function Experience() {
       </main>
 
       {/* Scroll height that drives the camera travel (canvas is fixed above). */}
-      <div style={{ height: "260vh" }} aria-hidden />
+      <div style={{ height: "440vh" }} aria-hidden />
     </>
   );
 }

@@ -14,31 +14,28 @@ import * as THREE from "three";
 //  - textureRef.current: the latest wetness texture
 
 const SIM_RES = 256;
-const ABSORB_TAU = 2.5; // absorption time constant (s) once it starts drying
-const HOLD_TAU = 9.0; // near-hold while saturated -> delay before absorption
-const SPREAD = 0.008; // diffusion sampling offset (uv): bigger = spreads faster
-const BRUSH = 0.09; // radius of water added under the cursor (uv) — wider
+const HOLD = 1.0; // seconds with NO absorption at all (water stays put)
+const ABSORB_TAU = 2.6; // amplitude fade time constant once it starts drying
+const ERODE = 0.05; // shrink rate once drying (eats edges -> contracts)
+const SPREAD = 0.006; // diffusion sampling offset (uv): bigger = spreads faster
+// Brush radius scales with speed: slow ~ narrow (~40px), fast ~ wide (~90px, capped).
+const RADIUS_MIN = 0.03;
+const RADIUS_MAX = 0.07;
+const SPEED_SLOW = 0.15; // uv/s -> min radius
+const SPEED_FAST = 1.5; // uv/s -> max radius
 
 const simFrag = /* glsl */ `
   precision highp float;
   varying vec2 vUv;
   uniform sampler2D uPrev;
   uniform vec2  uMouseA;   // segment start (prev frame)
-  uniform vec2  uMouseB;   // segment end (this frame)
+  uniform vec2  uMouseB;   // segment end (this frame = cursor)
   uniform float uActive;   // 1 if water is being added this frame
   uniform float uRadius;
-  uniform float uDt;       // frame delta (s)
-  uniform float uTau;      // absorption time constant once drying
-  uniform float uTauHold;  // near-hold time constant while saturated
+  uniform float uDecay;    // multiplicative amplitude fade (1 = hold)
+  uniform float uErode;    // subtractive shrink (0 = hold)
   uniform float uSpread;
   uniform float uAspect;   // layer width/height (keeps the brush round)
-  uniform float uSeed;
-
-  float hash(vec2 p){
-    p = fract(p * vec2(123.34, 345.45));
-    p += dot(p, p + 34.345);
-    return fract(p.x * p.y);
-  }
 
   void main(){
     // Diffusion: blend with neighbors (water spreading on paper).
@@ -49,24 +46,22 @@ const simFrag = /* glsl */ `
     float w = texture2D(uPrev, vUv - vec2(uSpread, 0.0)).r;
     float blur = c * 0.2 + (n + s + e + w) * 0.2;
 
-    // Absorption: near-hold while saturated, then absorbs over ~uTau seconds.
-    float hold = smoothstep(0.80, 1.0, blur);
-    float tau = mix(uTau, uTauHold, hold);
-    float wet = blur * exp(-uDt / tau);
+    // Absorption: hold (decay=1, erode=0), then fade (decay<1) + shrink (erode>0).
+    float wet = blur * uDecay - uErode;
 
-    // Add water along the mouse segment (aspect-corrected -> round brush).
     if (uActive > 0.5){
       vec2 asp = vec2(uAspect, 1.0);
-      vec2 P = vUv * asp;
       vec2 A = uMouseA * asp;
       vec2 B = uMouseB * asp;
+      // ROUND deposit along the movement segment (round caps -> round head at the
+      // cursor). The trail forms behind from the motion; the organic look comes
+      // from how the layer samples the spreading field, not from the deposit.
+      vec2 P = vUv * asp;
       vec2 BA = B - A;
       float h = clamp(dot(P - A, BA) / max(dot(BA, BA), 1e-6), 0.0, 1.0);
       float d = distance(P, A + BA * h);
-      float add = smoothstep(uRadius, uRadius * 0.25, d);
-      // uneven absorption front -> organic edges
-      float nz = 0.7 + 0.5 * hash(vUv * 220.0 + uSeed);
-      wet = max(wet, add * nz);
+      float add = smoothstep(uRadius, uRadius * 0.2, d);
+      wet = max(wet, add);
     }
 
     gl_FragColor = vec4(clamp(wet, 0.0, 1.0), 0.0, 0.0, 1.0);
@@ -88,13 +83,11 @@ export function useWaterField(aspect: number) {
         uMouseA: { value: new THREE.Vector2(-1, -1) },
         uMouseB: { value: new THREE.Vector2(-1, -1) },
         uActive: { value: 0 },
-        uRadius: { value: BRUSH },
-        uDt: { value: 0.016 },
-        uTau: { value: ABSORB_TAU },
-        uTauHold: { value: HOLD_TAU },
+        uRadius: { value: RADIUS_MIN },
+        uDecay: { value: 1 },
+        uErode: { value: 0 },
         uSpread: { value: SPREAD },
         uAspect: { value: aspect },
-        uSeed: { value: 0 },
       },
       vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
       fragmentShader: simFrag,
@@ -118,6 +111,8 @@ export function useWaterField(aspect: number) {
   // paused entirely -> with N layers, only the one being interacted with runs.
   const clock = useRef(0);
   const activeUntil = useRef(0);
+  const lastSplat = useRef(-999);
+  const radius = useRef(RADIUS_MIN);
 
   function splat(u: number, v: number) {
     input.current.cur.set(u, v);
@@ -142,7 +137,7 @@ export function useWaterField(aspect: number) {
 
     // Keep the sim alive for a cooldown after the last splat (covers absorption),
     // then pause it entirely. Skipping idle sheets saves most of the GPU cost.
-    if (inp.has) activeUntil.current = clock.current + 8;
+    if (inp.has) activeUntil.current = clock.current + 7;
     if (clock.current > activeUntil.current) {
       inp.has = false;
       return;
@@ -153,8 +148,31 @@ export function useWaterField(aspect: number) {
 
     u.uPrev.value = read.texture;
     u.uAspect.value = aspect;
-    u.uDt.value = dt;
-    u.uSeed.value += dt * 60.0;
+
+    // Brush width from movement speed (slow -> narrow, fast -> wide, capped).
+    let targetR = RADIUS_MIN;
+    if (inp.has) {
+      const speed = inp.cur.distanceTo(inp.prev) / dt; // uv/s
+      const tt = THREE.MathUtils.clamp(
+        (speed - SPEED_SLOW) / (SPEED_FAST - SPEED_SLOW),
+        0,
+        1
+      );
+      targetR = RADIUS_MIN + (RADIUS_MAX - RADIUS_MIN) * tt;
+    }
+    radius.current = THREE.MathUtils.damp(radius.current, targetR, 8, dt);
+    u.uRadius.value = radius.current;
+
+    // Absorption: nothing for HOLD seconds after the last splat, then fade + shrink.
+    if (inp.has) lastSplat.current = clock.current;
+    const dryT = clock.current - lastSplat.current;
+    if (dryT < HOLD) {
+      u.uDecay.value = 1;
+      u.uErode.value = 0;
+    } else {
+      u.uDecay.value = Math.exp(-dt / ABSORB_TAU);
+      u.uErode.value = ERODE * dt;
+    }
 
     if (inp.has) {
       if (!inp.wasActive) inp.prev.copy(inp.cur); // resumed -> no jump line

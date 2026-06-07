@@ -53,18 +53,6 @@ export const layerFragmentShader = /* glsl */ `
     return 130.0 * dot(m, g);
   }
 
-  // Fractal noise (clouds) — sum of octaves, ~0..1.
-  float fbm(vec2 p){
-    float v = 0.0;
-    float a = 0.5;
-    for(int i = 0; i < 4; i++){
-      v += a * (snoise(p) * 0.5 + 0.5);
-      p *= 2.0;
-      a *= 0.5;
-    }
-    return v;
-  }
-
   // "Paper-ness" (0 pigment, 1 paper) of the image at a given uv.
   float paperAt(vec2 p){
     vec3 c = texture2D(uMap, p).rgb;
@@ -74,13 +62,17 @@ export const layerFragmentShader = /* glsl */ `
   }
 
   void main(){
-    // Sample the wetness field with a small noise warp -> organic, wavy edges.
-    vec2 warp = vec2(snoise(vUv * 4.0 + 7.3), snoise(vUv * 4.0 + 19.1));
-    float wet = texture2D(uWet, vUv + warp * 0.02).r;
+    // Sample the wet field. The organic edge warp is scaled by how FAINT the
+    // wetness is: ~0 at the strong center (round spot near the cursor), full at
+    // the faint spreading edges (organic only when it spreads further out).
+    float wet0 = texture2D(uWet, vUv).r;
+    float warpAmt = 1.0 - smoothstep(0.0, 0.55, wet0);
+    vec2 warp = (vec2(snoise(vUv * 4.0 + 7.3), snoise(vUv * 4.0 + 19.1)) * 0.03
+              +  vec2(snoise(vUv * 9.0 + 31.0), snoise(vUv * 9.0 + 43.0)) * 0.015) * warpAmt;
+    float wet = texture2D(uWet, vUv + warp).r;
 
-    // Two levels derived from the same field.
-    float halo = smoothstep(0.06, 0.30, wet);
-    float core = smoothstep(0.40, 0.75, wet);
+    // Single sharp waterline (one layer only — no halo).
+    float shape = smoothstep(0.30, 0.46, wet);
 
     // ERODED interior mask: take the max "paper-ness" over a neighborhood, so any
     // structure thinner than the erosion radius (trunk, branches) drops to 0 and
@@ -98,36 +90,47 @@ export const layerFragmentShader = /* glsl */ `
     paperMax = max(paperMax, paperAt(vUv - vec2(o, -o) * 0.7));
     float interior = 1.0 - paperMax;
 
-    // "Cloud dissipating" appearance: a fractal (fbm) cloud gives each pixel a
-    // threshold, revealed as uAppear sweeps 0 -> 1. Random cloudy patches clear,
-    // no directional sweep.
-    float dmap = fbm(vUv * 2.0 + 11.0);
-    float reveal = uAppear * 1.6 - 0.3; // remap so fully hidden at 0, fully shown at 1
-    float appear = smoothstep(dmap - 0.28, dmap + 0.28, reveal);
+    // Reveal in TWO stages: the textured PAPER shape comes in first (paperReveal),
+    // then the watercolor pigment reveals on top via several staggered noise
+    // "droplet" layers (pigReveal) -> the painting appears in waves of drops.
+    float paperReveal = smoothstep(0.0, 0.3, uAppear);
+    float prog = clamp((uAppear - 0.28) / 0.72, 0.0, 1.0) * 1.4 - 0.2;
+    float n1 = snoise(vUv * 2.0 + 4.0) * 0.5 + 0.5;
+    float n2 = snoise(vUv * 3.3 + 21.0) * 0.5 + 0.5;
+    float n3 = snoise(vUv * 5.0 + 60.0) * 0.5 + 0.5;
+    float l1 = smoothstep(n1 - 0.25, n1 + 0.25, prog + 0.18);
+    float l2 = smoothstep(n2 - 0.25, n2 + 0.25, prog);
+    float l3 = smoothstep(n3 - 0.25, n3 + 0.25, prog - 0.18);
+    float pigReveal = (l1 + l2 + l3) / 3.0;
 
-    // Local distortion follows the wet area, fades as it gets absorbed,
-    // and is confined to the inside of the shape (eroded interior mask).
-    float t = uTime * 0.5;
-    vec2 dwarp = vec2(
-      snoise(vUv * 3.0 + vec2(t, 1.7)),
-      snoise(vUv * 3.0 + vec2(-1.3, t))
+    // Distortion: displace the sampled image a few px in a slowly-shifting,
+    // locally-uniform direction (low-freq + ANIMATED -> the shift is felt, but no
+    // per-pixel zigzag/swirl). Confined to the wet area + interior (edges fixed).
+    vec2 off = vec2(
+      snoise(vUv * 1.2 + vec2(uTime * 0.3, 0.0)),
+      snoise(vUv * 1.2 + vec2(0.0, uTime * 0.3) + 30.0)
     );
-    vec2 uv = vUv + dwarp * (uDistort * halo * interior);
+    vec2 uv = vUv + off * (uDistort * shape * interior);
 
-    vec3 col = texture2D(uMap, uv).rgb;
+    vec3 img = texture2D(uMap, uv).rgb;
 
-    // Paper knockout: light & low-saturation pixels (white paper) -> pure white.
-    float luma = dot(col, vec3(0.299, 0.587, 0.114));
-    float sat = max(col.r, max(col.g, col.b)) - min(col.r, min(col.g, col.b));
+    // Coverage = ALPHA: pigment is opaque, the white paper around is transparent.
+    // -> the element is OPAQUE over whatever is behind it (no see-through).
+    float luma = dot(img, vec3(0.299, 0.587, 0.114));
+    float sat = max(img.r, max(img.g, img.b)) - min(img.r, min(img.g, img.b));
     float paper = smoothstep(0.86, 0.98, luma) * (1.0 - smoothstep(0.05, 0.13, sat));
-    col = mix(col, vec3(1.0), paper);
+    float cov = 1.0 - paper;
 
-    // Opacity, three levels: base (~50%) -> halo to 65% -> core to 100%.
-    float opacity = uBaseOpacity;
-    opacity = max(opacity, mix(uBaseOpacity, 0.65, halo));
-    opacity = max(opacity, mix(uBaseOpacity, 1.00, core));
-    col = mix(vec3(1.0), col, opacity * appear);
+    // Opaque textured paper base sitting in the element's shape (subtle grain).
+    float grain = snoise(vUv * 230.0) * 0.5 + 0.5;
+    vec3 paperCol = vec3(0.97, 0.96, 0.93) - grain * 0.05;
 
-    gl_FragColor = vec4(col, 1.0);
+    // Pigment: paper reveals first, then the watercolor; base strength at rest,
+    // full where wet. The shape stays opaque (the paper); only the pigment fades.
+    float pig = mix(uBaseOpacity, 1.0, shape) * pigReveal;
+    vec3 col = mix(paperCol, img, pig);
+
+    float alpha = cov * paperReveal;
+    gl_FragColor = vec4(col, alpha);
   }
 `;
