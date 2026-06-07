@@ -48,7 +48,7 @@ export default function SeasonText({
           1 - smoothstep(0, EDGE, 1 - pos) // near bottom edge
         );
         el.style.filter = e > 0.002 ? `blur(${e * 2.5}px)` : "none";
-        el.style.transform = `scaleX(${1 + e * 0.04}) scaleY(${1 - e * 0.02})`;
+        el.style.transform = `scaleX(${1 + e * 0.025}) scaleY(${1 - e * 0.015})`;
         el.style.opacity = String(1 - e);
       }
       id = requestAnimationFrame(tick);

@@ -1,7 +1,6 @@
-// Diorama description, layer by layer (back to front).
-// Each layer = a watercolor visual composited with `multiply` (white background).
-
-export type Blend = "multiply" | "normal" | "screen";
+// Diorama description, layer by layer (back to front). Each layer is a watercolor
+// image composited with ALPHA: the painted shape is opaque (a textured paper base
+// + the watercolor), the white paper around it is transparent (see shaders.ts).
 
 export type LayerDef = {
   id: string;
@@ -15,11 +14,9 @@ export type LayerDef = {
   x: number;
   /** Vertical position, fraction of height (negative = downward). */
   y: number;
-  /** Composition mode (default multiply). */
-  blend?: Blend;
   /** Max distortion amplitude under the cursor (default 0.016). */
   distortion?: number;
-  /** Opacity at rest, 0..1 (default 0.85). 100% under the wet area. */
+  /** Pigment strength at rest, 0..1 (default 0.5). 100% under the wet area. */
   baseOpacity?: number;
   /** Emit little leaves when hovering the foliage. */
   particles?: boolean;
@@ -31,14 +28,12 @@ export type LayerDef = {
   tilt?: boolean;
 };
 
-// Horizontal journey of "stations" (seasons) spread along X. Scroll pans the
+// Horizontal journey of 4 "stations" (seasons) spread along X. Scroll pans the
 // layers left so each station comes to center in turn:
-//   station center scroll s  ->  x = s * SCROLL_SPAN * 2  (= s * 3.6)
-//   spring s=0 (x 0), summer s=0.5 (x 1.8), autumn s=1 (x 3.6).
-// Parallax kept near 1 (0.85..1.15) so a station's layers stay grouped while
-// still giving depth. Distant layers = smaller + paler (atmospheric perspective).
-// Listed back -> front (array index = render order). Winter station: add when
-// the asset exists.
+//   station center scroll s  ->  x = s * SCROLL_SPAN * 2  (= s * 4.8)
+//   spring s=0 (x 0), summer s=1/3 (x 1.6), autumn s=2/3 (x 3.2), winter s=1 (x 4.8).
+// Per-station parallax stays near 1 so the layers keep grouped while still giving
+// depth. Listed back -> front (array index = render order).
 export const SCENE_LAYERS: LayerDef[] = [
   // 🌸 Spring (x 0) — the first hero gets the 3D tilt; everything else is flat.
   {
@@ -86,6 +81,5 @@ export const SCENE_LAYERS: LayerDef[] = [
   },
 ];
 
-// Off-white background (very subtle gradient for a hint of paper texture).
-export const BG_TOP = "#f7f5f0";
+// Off-white page background (behind the canvas; matches the scene on load).
 export const BG_BOTTOM = "#f1eee6";

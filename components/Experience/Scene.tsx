@@ -6,7 +6,7 @@ import * as THREE from "three";
 import { SCENE_LAYERS } from "@/lib/scene";
 import Layer from "./Layer";
 
-type SeasonRef = React.MutableRefObject<number>;
+type ScrollRef = React.MutableRefObject<number>;
 
 // Sky palettes per station [top, bottom], at scroll positions 0, 1/3, 2/3, 1.
 const SKY: [string, string][] = [
@@ -18,7 +18,7 @@ const SKY: [string, string][] = [
 const SKY_AT = [0, 1 / 3, 2 / 3, 1];
 
 // Background plate: gradient sky that shifts between stations as you scroll.
-function Background({ scrollRef }: { scrollRef: SeasonRef }) {
+function Background({ scrollRef }: { scrollRef: ScrollRef }) {
   const { viewport } = useThree();
   const { uniforms, tops, bottoms } = useMemo(() => {
     const tops = SKY.map(([t]) => new THREE.Color(t));
@@ -78,7 +78,7 @@ function Background({ scrollRef }: { scrollRef: SeasonRef }) {
   );
 }
 
-export default function Scene({ scrollRef }: { scrollRef: SeasonRef }) {
+export default function Scene({ scrollRef }: { scrollRef: ScrollRef }) {
   return (
     <>
       <Background scrollRef={scrollRef} />

@@ -1,11 +1,12 @@
 // Shaders for a single diorama layer.
 //
-// The "wetness" comes from a GPU water field (see useWaterField): a texture in
-// uv space where water is added along the mouse, spreads (diffusion) and is
-// absorbed by the paper (decay). Here we just SAMPLE it (uWet) and derive:
-//   - core: high wetness  -> opacity to 100% + drives the distortion
-//   - halo: lower wetness -> opacity to ~65%
-// Multiply compositing is handled by the material blending, not here.
+// The "wetness" comes from a GPU water field (see useWaterField): a uv-space
+// texture where water is added along the mouse, spreads (diffusion) and is
+// absorbed (decay). The layer SAMPLES it (uWet) to:
+//   - reveal the watercolor (rest pigment -> full where wet)
+//   - drive a subtle image displacement (distortion), confined to the shape
+// Compositing is ALPHA: the painted shape is opaque (textured paper + pigment),
+// the white paper around it is transparent (cov). Reveal-on-load is uAppear.
 
 export const layerVertexShader = /* glsl */ `
   varying vec2 vUv;

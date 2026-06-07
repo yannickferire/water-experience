@@ -18,7 +18,7 @@ const HOLD = 1.0; // seconds with NO absorption at all (water stays put)
 const ABSORB_TAU = 2.6; // amplitude fade time constant once it starts drying
 const ERODE = 0.05; // shrink rate once drying (eats edges -> contracts)
 const SPREAD = 0.006; // diffusion sampling offset (uv): bigger = spreads faster
-// Brush radius scales with speed: slow ~ narrow (~40px), fast ~ wide (~90px, capped).
+// Brush radius (uv) scales with cursor speed: slow -> narrow, fast -> wider (capped).
 const RADIUS_MIN = 0.03;
 const RADIUS_MAX = 0.07;
 const SPEED_SLOW = 0.15; // uv/s -> min radius
