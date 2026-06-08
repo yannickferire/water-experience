@@ -14,10 +14,18 @@ import * as THREE from "three";
 //  - textureRef.current: the latest wetness texture
 
 const SIM_RES = 256;
-const HOLD = 1.0; // seconds with NO absorption at all (water stays put)
-const ABSORB_TAU = 2.6; // amplitude fade time constant once it starts drying
-const ERODE = 0.05; // shrink rate once drying (eats edges -> contracts)
+// Constant absorption: each pixel loses ABSORB wetness/second, so what was wet
+// first reaches 0 first; FILL lets lingered/repeated passes build wetness above
+// 1 (up to WET_MAX) -> wetter areas take proportionally LONGER to absorb.
+const ABSORB = 0.36; // wetness units drained per second (constant, per pixel)
+const FILL = 1.3; // build-up rate per second while the brush is over a spot
+const WET_MAX = 1.8; // max stored wetness (longer to absorb)
+// Per-pixel delay before absorption starts (stored in the G channel). Longer
+// when the spot is more saturated.
+const HOLD_BASE = 1.0; // seconds of "no absorption" for a normally-wet spot
+const HOLD_PER_WET = 1.3; // extra seconds per unit of wetness above 1 (saturation)
 const SPREAD = 0.006; // diffusion sampling offset (uv): bigger = spreads faster
+const SPREAD_GAIN = 0.5; // how strongly water spreads while wet (decays as it dries)
 // Brush radius (uv) scales with cursor speed: slow -> narrow, fast -> wider (capped).
 const RADIUS_MIN = 0.03;
 const RADIUS_MAX = 0.07;
@@ -30,41 +38,62 @@ const simFrag = /* glsl */ `
   uniform sampler2D uPrev;
   uniform vec2  uMouseA;   // segment start (prev frame)
   uniform vec2  uMouseB;   // segment end (this frame = cursor)
-  uniform float uActive;   // 1 if water is being added this frame
+  uniform float uActive;     // 1 if water is being added this frame
   uniform float uRadius;
-  uniform float uDecay;    // multiplicative amplitude fade (1 = hold)
-  uniform float uErode;    // subtractive shrink (0 = hold)
+  uniform float uAbsorb;     // wetness drained this frame once holding ends (ABSORB * dt)
+  uniform float uFill;       // build-up this frame while over a spot (FILL * dt)
+  uniform float uMaxWet;     // max stored wetness
+  uniform float uDt;         // frame delta (s) — counts down the hold timer
+  uniform float uHoldBase;   // base "no absorption" delay (s)
+  uniform float uHoldPerWet; // extra delay per unit of wetness above 1 (s)
   uniform float uSpread;
-  uniform float uAspect;   // layer width/height (keeps the brush round)
+  uniform float uSpreadGain; // spread strength (scaled by wetness -> decelerates)
+  uniform float uAspect;     // layer width/height (keeps the brush round)
 
+  // R = wetness, G = hold timer (seconds left before absorption starts).
   void main(){
-    // Diffusion: blend with neighbors (water spreading on paper).
     float c = texture2D(uPrev, vUv).r;
+    float hold = texture2D(uPrev, vUv).g;
     float n = texture2D(uPrev, vUv + vec2(0.0, uSpread)).r;
     float s = texture2D(uPrev, vUv - vec2(0.0, uSpread)).r;
     float e = texture2D(uPrev, vUv + vec2(uSpread, 0.0)).r;
     float w = texture2D(uPrev, vUv - vec2(uSpread, 0.0)).r;
-    float blur = c * 0.2 + (n + s + e + w) * 0.2;
+    float avg = (n + s + e + w) * 0.25;
+    float local = max(c, max(max(n, s), max(e, w)));
+    float k = clamp(local * uSpreadGain, 0.0, 0.5);
+    float wet;
 
-    // Absorption: hold (decay=1, erode=0), then fade (decay<1) + shrink (erode>0).
-    float wet = blur * uDecay - uErode;
+    if (hold > 0.0) {
+      // EXPANSION phase (still wet, NO absorption): plain diffusion spreads the
+      // trail STRAIGHT/round, following the stroke. The organic, irregular borders
+      // are added by the LAYER shader (warped sampling) so the trail stays clean.
+      hold = max(0.0, hold - uDt);
+      wet = mix(c, avg, k);
+    } else {
+      // ABSORPTION phase: gentle decelerating diffusion + constant drain ->
+      // wet-first dries-first, wetter lasts longer.
+      wet = mix(c, avg, k) - uAbsorb;
+    }
 
     if (uActive > 0.5){
       vec2 asp = vec2(uAspect, 1.0);
       vec2 A = uMouseA * asp;
       vec2 B = uMouseB * asp;
-      // ROUND deposit along the movement segment (round caps -> round head at the
-      // cursor). The trail forms behind from the motion; the organic look comes
-      // from how the layer samples the spreading field, not from the deposit.
       vec2 P = vUv * asp;
       vec2 BA = B - A;
       float h = clamp(dot(P - A, BA) / max(dot(BA, BA), 1e-6), 0.0, 1.0);
       float d = distance(P, A + BA * h);
       float add = smoothstep(uRadius, uRadius * 0.2, d);
-      wet = max(wet, add);
+      wet = max(wet, add);    // instant visibility up to 1
+      wet += add * uFill;     // lingered/repeated passes build up beyond 1
+      wet = min(wet, uMaxWet);
+      // refresh the hold while wetting; longer when more saturated (wet > 1).
+      if (add > 0.02) {
+        hold = max(hold, uHoldBase + max(0.0, wet - 1.0) * uHoldPerWet);
+      }
     }
 
-    gl_FragColor = vec4(clamp(wet, 0.0, 1.0), 0.0, 0.0, 1.0);
+    gl_FragColor = vec4(clamp(wet, 0.0, uMaxWet), clamp(hold, 0.0, 6.0), 0.0, 1.0);
   }
 `;
 
@@ -84,9 +113,14 @@ export function useWaterField(aspect: number) {
         uMouseB: { value: new THREE.Vector2(-1, -1) },
         uActive: { value: 0 },
         uRadius: { value: RADIUS_MIN },
-        uDecay: { value: 1 },
-        uErode: { value: 0 },
+        uAbsorb: { value: 0 },
+        uFill: { value: 0 },
+        uMaxWet: { value: WET_MAX },
+        uDt: { value: 0.016 },
+        uHoldBase: { value: HOLD_BASE },
+        uHoldPerWet: { value: HOLD_PER_WET },
         uSpread: { value: SPREAD },
+        uSpreadGain: { value: SPREAD_GAIN },
         uAspect: { value: aspect },
       },
       vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
@@ -111,7 +145,6 @@ export function useWaterField(aspect: number) {
   // paused entirely -> with N layers, only the one being interacted with runs.
   const clock = useRef(0);
   const activeUntil = useRef(0);
-  const lastSplat = useRef(-999);
   const radius = useRef(RADIUS_MIN);
 
   function splat(u: number, v: number) {
@@ -137,7 +170,7 @@ export function useWaterField(aspect: number) {
 
     // Keep the sim alive for a cooldown after the last splat (covers absorption),
     // then pause it entirely. Skipping idle sheets saves most of the GPU cost.
-    if (inp.has) activeUntil.current = clock.current + 7;
+    if (inp.has) activeUntil.current = clock.current + 11;
     if (clock.current > activeUntil.current) {
       inp.has = false;
       return;
@@ -163,16 +196,10 @@ export function useWaterField(aspect: number) {
     radius.current = THREE.MathUtils.damp(radius.current, targetR, 8, dt);
     u.uRadius.value = radius.current;
 
-    // Absorption: nothing for HOLD seconds after the last splat, then fade + shrink.
-    if (inp.has) lastSplat.current = clock.current;
-    const dryT = clock.current - lastSplat.current;
-    if (dryT < HOLD) {
-      u.uDecay.value = 1;
-      u.uErode.value = 0;
-    } else {
-      u.uDecay.value = Math.exp(-dt / ABSORB_TAU);
-      u.uErode.value = ERODE * dt;
-    }
+    // Constant per-frame absorption + build-up rate + hold countdown.
+    u.uAbsorb.value = ABSORB * dt;
+    u.uFill.value = FILL * dt;
+    u.uDt.value = dt;
 
     if (inp.has) {
       if (!inp.wasActive) inp.prev.copy(inp.cur); // resumed -> no jump line

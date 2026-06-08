@@ -6,78 +6,89 @@ export type LayerDef = {
   id: string;
   /** Asset path under /public. */
   src: string;
-  /** Parallax depth: 0 = far background, 1 = foreground. */
-  depth: number;
-  /** Layer height as a fraction of the viewport height (1 = full). */
-  scale: number;
-  /** Horizontal position, fraction of half-width (-1 left, +1 right). */
-  x: number;
+  /** Scroll position (0..1) where this layer is CENTERED (its "season station"). */
+  station: number;
+  /** Screen offset at the station, fraction of half-width (-1 left, +1 right). */
+  offsetX?: number;
   /** Vertical position, fraction of height (negative = downward). */
   y: number;
+  /** Layer height as a fraction of the viewport height (1 = full). */
+  scale: number;
+  /** Depth for the mouse parallax (0 far .. 1 near). */
+  depth: number;
+  /** Scroll parallax factor (speed): <1 far/slow, >1 near/fast. */
+  parallax?: number;
   /** Max distortion amplitude under the cursor (default 0.016). */
   distortion?: number;
   /** Pigment strength at rest, 0..1 (default 0.5). 100% under the wet area. */
   baseOpacity?: number;
   /** Emit little leaves when hovering the foliage. */
   particles?: boolean;
-  /** Scroll parallax factor: 0 = static far background, >1 = fast foreground. */
-  parallax?: number;
   /** Mirror the layer horizontally (cheap variety when reusing an asset). */
   flipX?: boolean;
   /** Give the layer a 3D sheet tilt that reacts to the mouse (else flat 2D). */
   tilt?: boolean;
 };
 
-// Horizontal journey of 4 "stations" (seasons) spread along X. Scroll pans the
-// layers left so each station comes to center in turn:
-//   station center scroll s  ->  x = s * SCROLL_SPAN * 2  (= s * 4.8)
-//   spring s=0 (x 0), summer s=1/3 (x 1.6), autumn s=2/3 (x 3.2), winter s=1 (x 4.8).
-// Per-station parallax stays near 1 so the layers keep grouped while still giving
-// depth. Listed back -> front (array index = render order).
+// 4 stations along the scroll (0, ⅓, ⅔, 1). Each layer is CENTERED at its station
+// (regardless of its parallax — see Layer.tsx); offsetX places it left/right within
+// the scene. Listed back -> front (array index = render order).
 export const SCENE_LAYERS: LayerDef[] = [
-  // 🌸 Spring (x 0) — the first hero gets the 3D tilt; everything else is flat.
+  // 🌸 Spring (station 0) — the first hero gets the 3D tilt.
   {
     id: "spring-ducks",
     src: "/assets/ducks-spring.jpg",
-    depth: 0.5, scale: 0.78, x: 0.45, y: -0.02,
-    parallax: 1.0, baseOpacity: 0.6, distortion: 0.016,
+    station: 0, offsetX: 0.7, y: -0.02, scale: 0.78,
+    depth: 0.5, parallax: 1.0, baseOpacity: 0.6, distortion: 0.016,
   },
   {
     id: "spring-tree",
     src: "/assets/tree-spring.jpg",
-    depth: 0.85, scale: 0.88, x: -0.08, y: 0,
-    parallax: 1.15, baseOpacity: 0.5, distortion: 0.02, particles: true,
-    tilt: true,
+    station: 0, offsetX: -0.12, y: 0, scale: 0.88,
+    depth: 0.85, parallax: 1.15, baseOpacity: 0.5, distortion: 0.02,
+    particles: true, tilt: true,
   },
 
-  // ☀️ Summer (x 1.6) — sunflowers as a foreground scene (like the ducks)
+  // ☀️ Summer (station ⅓)
   {
     id: "summer-sunflower",
     src: "/assets/sunflower-summer.jpg",
-    depth: 0.5, scale: 0.78, x: 2.05, y: -0.02,
-    parallax: 1.0, baseOpacity: 0.6, distortion: 0.016,
+    station: 0.3333, offsetX: 0.7, y: -0.02, scale: 0.78,
+    depth: 0.5, parallax: 1.0, baseOpacity: 0.6, distortion: 0.016,
   },
   {
     id: "summer-tree",
     src: "/assets/tree-summer.jpg",
-    depth: 0.85, scale: 0.85, x: 1.6, y: 0,
-    parallax: 1.15, baseOpacity: 0.5, distortion: 0.02, particles: true,
+    station: 0.3333, offsetX: -0.1, y: 0, scale: 0.85,
+    depth: 0.85, parallax: 1.15, baseOpacity: 0.5, distortion: 0.02, particles: true,
   },
 
-  // 🍂 Autumn (x 3.2) — single tree (no duplicate)
+  // 🍂 Autumn (station ⅔) — deer as a close foreground on the right (faster, lower).
   {
     id: "autumn-tree",
     src: "/assets/tree-autumn.jpg",
-    depth: 0.85, scale: 0.85, x: 3.2, y: 0,
-    parallax: 1.0, baseOpacity: 0.5, distortion: 0.02, particles: true,
+    station: 0.6667, offsetX: -0.12, y: 0, scale: 0.85,
+    depth: 0.85, parallax: 1.0, baseOpacity: 0.5, distortion: 0.02, particles: true,
+  },
+  {
+    id: "autumn-deer",
+    src: "/assets/deer-autumn.jpg",
+    station: 0.6667, offsetX: 0.65, y: -0.18, scale: 0.62,
+    depth: 0.95, parallax: 1.25, baseOpacity: 0.6, distortion: 0.016,
   },
 
-  // ❄️ Winter (x 4.8)
+  // ❄️ Winter (station 1) — snowman further back on the LEFT, snowy tree close by.
+  {
+    id: "winter-snowman",
+    src: "/assets/squirrel-winter.jpg",
+    station: 1, offsetX: -0.45, y: 0.05, scale: 0.5,
+    depth: 0.3, parallax: 0.92, baseOpacity: 0.45, distortion: 0.012,
+  },
   {
     id: "winter-tree",
     src: "/assets/tree-winter.jpg",
-    depth: 0.85, scale: 0.85, x: 4.8, y: 0,
-    parallax: 1.0, baseOpacity: 0.5, distortion: 0.02,
+    station: 1, offsetX: 0.1, y: 0, scale: 0.85,
+    depth: 0.85, parallax: 1.15, baseOpacity: 0.5, distortion: 0.02,
   },
 ];
 

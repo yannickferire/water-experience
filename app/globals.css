@@ -193,13 +193,13 @@ a {
 .cursor__outer {
   width: 95px;
   height: 95px;
-  border: 1px solid #ccc;
+  border: 1px solid #a6a6a6;
   opacity: 0.75;
 }
 .cursor__inner {
   width: 7px;
   height: 7px;
-  background: #ccc;
+  background: #777;
 }
 
 /* Hover over a WebGL image */

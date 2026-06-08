@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { Suspense, useMemo, useRef, useState } from "react";
 import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { useTexture } from "@react-three/drei";
 import * as THREE from "three";
@@ -20,10 +20,17 @@ const BASE_TILT_Y = 0.1;
 const LEAF_MIN_V = 0.32;
 // Chance to emit on each move (keeps it subtle).
 const LEAF_CHANCE = 0.28;
-// How far layers travel horizontally over the full scroll (in viewport widths, parallax=1).
-const SCROLL_SPAN = 2.4;
+// Horizontal travel over the full scroll (viewport widths, parallax=1).
+// Bigger = more empty space between the season stations.
+const SCROLL_SPAN = 3.5;
 // Zoom amplitude over the journey (subtle, so stations stay roughly centered).
 const ZOOM_AMP = 0.18;
+// Mount (lazy-load the texture) when the scroll is within this of the station.
+const ENTER_MARGIN = 0.55;
+// Reveal TRIGGERS when the station comes within this of the scroll, then blooms
+// over time (below). 0.28 < the 0.333 station gap so neighbours don't pre-reveal.
+const REVEAL_START = 0.28;
+const INTRO_MS = 2.8; // bloom duration once a layer's reveal is triggered
 
 type Props = {
   def: LayerDef;
@@ -32,14 +39,43 @@ type Props = {
 };
 type Sampler = { data: Uint8ClampedArray; w: number; h: number };
 
+// Wrapper: nothing is loaded/rendered until the layer's station nears the view.
+// Once mounted it stays mounted (no reload / no re-reveal).
 export default function Layer({ def, order, scrollRef }: Props) {
+  const [mounted, setMounted] = useState(false);
+
+  useFrame(() => {
+    if (mounted) return;
+    if (Math.abs(scrollRef.current - def.station) < ENTER_MARGIN) setMounted(true);
+  });
+
+  if (!mounted) return null;
+  return (
+    <Suspense fallback={null}>
+      <LayerContent def={def} order={order} scrollRef={scrollRef} />
+    </Suspense>
+  );
+}
+
+// Content: loaded only once mounted; its reveal starts on mount (= on view enter).
+function LayerContent({ def, order, scrollRef }: Props) {
   const { viewport, pointer } = useThree();
   const meshRef = useRef<THREE.Mesh>(null);
   const matRef = useRef<THREE.ShaderMaterial>(null);
   const mouse = useRef(new THREE.Vector2(0, 0));
   const queue = useRef<EmitReq[]>([]);
   const hoverObj = useRef(false); // currently over the painted object (not paper)
-  const elapsed = useRef(0); // for the staggered intro bloom
+  const elapsed = useRef(0); // bloom clock (counts up once the reveal is triggered)
+  const revealStarted = useRef(false); // latched: has the reveal begun?
+  const maxAppear = useRef(0); // latched reveal (so it stays revealed once shown)
+
+  // Captured at mount: was this layer already in view? -> it blooms on load (spring);
+  // others reveal as the scroll brings them near their station.
+  const initiallyVisible = useMemo(
+    () => Math.abs(scrollRef.current - def.station) < REVEAL_START,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
 
   const tex = useTexture(def.src);
   useMemo(() => {
@@ -89,7 +125,11 @@ export default function Layer({ def, order, scrollRef }: Props) {
 
   const h = def.scale * viewport.height;
   const w = h * aspect;
-  const baseX = def.x * viewport.width * 0.5;
+  // Centered at scroll = def.station regardless of parallax: at that scroll the
+  // pan exactly cancels, leaving only offsetX. (screen_x = offsetX*W/2 at station)
+  const baseX =
+    (def.offsetX ?? 0) * viewport.width * 0.5 +
+    def.station * (def.parallax ?? 1) * viewport.width * SCROLL_SPAN;
   const baseY = def.y * viewport.height;
 
   useFrame((_, dt) => {
@@ -103,28 +143,31 @@ export default function Layer({ def, order, scrollRef }: Props) {
     mat.uniforms.uTime.value += dt;
     mat.uniforms.uWet.value = water.textureRef.current;
 
-    // Staggered intro bloom: deeper layers (lower order) appear first.
-    elapsed.current += dt;
-    const delay = order * 0.3;
-    const p = THREE.MathUtils.clamp((elapsed.current - delay) / 2.6, 0, 1);
-    mat.uniforms.uAppear.value = 1 - Math.pow(1 - p, 3); // easeOutCubic
-
     const scroll = scrollRef.current;
-    // Horizontal camera travel: layers pan left, faster ones in front (parallax).
+
+    // The reveal TRIGGERS once the station comes near (d < REVEAL_START) — or right
+    // away for the layer already in view at load — then blooms over INTRO_MS by
+    // TIME, so the animation is always visible however fast you scroll. Latched via
+    // revealStarted + maxAppear so it never restarts or un-reveals. uAppear feeds
+    // the two-stage (paper then pigment) droplet reveal in the shader.
+    const d = Math.abs(scroll - def.station);
+    if (revealStarted.current || initiallyVisible || d < REVEAL_START) {
+      revealStarted.current = true;
+      elapsed.current += dt;
+      const e = THREE.MathUtils.clamp(elapsed.current / INTRO_MS, 0, 1);
+      maxAppear.current = Math.max(maxAppear.current, 1 - Math.pow(1 - e, 3));
+    }
+    mat.uniforms.uAppear.value = maxAppear.current;
     const panX = -scroll * (def.parallax ?? 1) * viewport.width * SCROLL_SPAN;
-    // Zoom in toward mid-journey, back out at the end.
     const zoom = 1 + ZOOM_AMP * Math.sin(scroll * Math.PI);
 
-    // INVERSE movement to the mouse (deeper = moves more).
     const amp = def.depth * 0.06;
     const px = baseX + panX - mouse.current.x * amp * viewport.width;
     const py = baseY - mouse.current.y * amp * viewport.height;
 
-    // Position + scale, zoomed about the origin (screen center).
     mesh.position.set(px * zoom, py * zoom, 0);
     mesh.scale.set((def.flipX ? -w : w) * zoom, h * zoom, 1);
 
-    // "3D sheet" tilt only on flagged layers; the rest stay flat (parallax only).
     if (def.tilt) {
       mesh.rotation.y = BASE_TILT_Y + mouse.current.x * 0.12;
       mesh.rotation.x = BASE_TILT_X - mouse.current.y * 0.12;
@@ -142,10 +185,8 @@ export default function Layer({ def, order, scrollRef }: Props) {
     const u = e.uv.x;
     const v = e.uv.y;
 
-    // Add water at the cursor (the field handles spreading + absorption).
     water.splat(u, v);
 
-    // Sample the pixel under the cursor.
     const x = Math.min(sampler.w - 1, Math.max(0, Math.floor(u * sampler.w)));
     const y = Math.min(sampler.h - 1, Math.max(0, Math.floor((1 - v) * sampler.h)));
     const i = (y * sampler.w + x) * 4;
@@ -156,10 +197,8 @@ export default function Layer({ def, order, scrollRef }: Props) {
     const sat = Math.max(r, g, b) - Math.min(r, g, b);
     const isPaper = luma > 0.9 && sat < 0.08;
 
-    // Cursor "hover-image" only over the actual painted object (not white paper).
     setHover(!isPaper);
 
-    // Particles: foliage only = green pigment, upper part (excludes grass + trunk).
     if (!def.particles) return;
     const isLeaf =
       !isPaper && v > LEAF_MIN_V && g >= r * 0.92 && g >= b * 0.85 && luma < 0.92;

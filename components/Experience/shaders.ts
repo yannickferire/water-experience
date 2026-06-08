@@ -63,14 +63,21 @@ export const layerFragmentShader = /* glsl */ `
   }
 
   void main(){
-    // Sample the wet field. The organic edge warp is scaled by how FAINT the
-    // wetness is: ~0 at the strong center (round spot near the cursor), full at
-    // the faint spreading edges (organic only when it spreads further out).
+    // Sample the wet field. The body stays CLEAN/straight (the sim is plain
+    // diffusion); only the faint OUTER fringe is broken up into little irregular
+    // cloud-like rounds.
     float wet0 = texture2D(uWet, vUv).r;
-    float warpAmt = 1.0 - smoothstep(0.0, 0.55, wet0);
-    vec2 warp = (vec2(snoise(vUv * 4.0 + 7.3), snoise(vUv * 4.0 + 19.1)) * 0.03
-              +  vec2(snoise(vUv * 9.0 + 31.0), snoise(vUv * 9.0 + 43.0)) * 0.015) * warpAmt;
+    // edge BAND: zero on dry paper (no water) AND in the dense core; high only in
+    // the transition zone -> blobs never pollute the dry image (which would kill
+    // the reveal) and never break up the clean trail body.
+    float fringe = smoothstep(0.05, 0.2, wet0) * (1.0 - smoothstep(0.32, 0.5, wet0));
+    // a touch of warp (waviness)
+    vec2 warp = vec2(snoise(vUv * 4.0 + 7.3), snoise(vUv * 4.0 + 19.1)) * 0.01 * fringe;
     float wet = texture2D(uWet, vUv + warp).r;
+    // medium-frequency noise pushes the fringe up/down -> small rounded blobs.
+    float blob = snoise(vUv * 13.0 + 3.0) * 0.5 + 0.5;
+    float cluster = snoise(vUv * 5.0 + 20.0) * 0.5 + 0.5; // some areas bloom more
+    wet += (blob - 0.5) * 0.5 * fringe * (0.5 + cluster);
 
     // Single sharp waterline (one layer only — no halo).
     float shape = smoothstep(0.30, 0.46, wet);
