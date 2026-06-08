@@ -36,7 +36,7 @@ export default function SeasonPlayer() {
         </span>
       ) : (
         <span className="player__label player__label--off">
-          {hasPlayed ? "paused" : "play sound"}
+          {hasPlayed ? "paused" : "click to play sound"}
         </span>
       )}
       <span className="player__dot" />
