@@ -39,6 +39,3 @@ export const SEASON_TEXTS: SeasonText[] = [
     ],
   },
 ];
-
-// Scroll position (0..1) where each season is centered.
-export const SEASON_AT = [0, 1 / 3, 2 / 3, 1];

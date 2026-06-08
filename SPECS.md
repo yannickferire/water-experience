@@ -1,170 +1,119 @@
-# Water Experience — Specs & how it works
+# Specs — how it works
 
-A WebGL experience: a **watercolor diorama** of the **four seasons** that you
-travel through horizontally on scroll, with a **water effect** on hover and
-contextual text + music. Inspired by the David Whyte Experience (Immersive
-Garden), rebuilt with our own assets and code.
-
----
+A WebGL **watercolor diorama** of the **four seasons**, traveled horizontally on
+scroll, with a **water-on-paper effect** on hover plus contextual text and music.
+Inspired by the David Whyte Experience (Immersive Garden), rebuilt with original
+assets and shaders. Setup: see [README.md](README.md).
 
 ## Stack
 
 | Role | Tech |
 |---|---|
-| Framework | Next.js (App Router), client-only for the experience |
-| 3D rendering | Three.js via React Three Fiber (`@react-three/fiber`, `@react-three/drei`) |
+| Framework | Next.js (App Router), client-only experience |
+| 3D | Three.js via React Three Fiber + drei |
 | Smooth scroll | Lenis |
 | Shaders | inline GLSL (TS strings) |
-| Type | `Caudex` (text) + `Inter` (UI) via `next/font` |
+| Fonts | `Caudex` (text), `Sono` (mono / UI) via `next/font` |
 | Deploy | Vercel |
 
----
-
-## File architecture
+## Architecture
 
 ```
 app/
-  layout.tsx        fonts + mounts the custom cursor
-  page.tsx          client-only import of Experience (no SSR)
-  globals.css       reset, text block, custom cursor
+  layout.tsx         fonts + mounts the custom cursor
+  page.tsx           client-only import of Experience (no SSR)
+  globals.css        reset, text, cursor, player, scroll hint
 components/
-  CustomCursor.tsx  custom cursor (ring + dot, dual trailing)
-  SeasonText.tsx    fixed text block on the left (scrolls on scroll)
-  SeasonAudio.tsx   one looping track per season, crossfaded on scroll
+  CustomCursor.tsx   ring + dot cursor (dual trailing)
+  SeasonText.tsx     fixed left text column (scrolls on scroll)
+  ScrollHint.tsx     "Scroll to explore" hint
+  SeasonAudio.tsx    one looping track per season, crossfaded on scroll
+  SeasonPlayer.tsx   bottom-right play/pause + now-playing label
   Experience/
-    Experience.tsx  shell: <Canvas>, Lenis -> scrollRef, scrollable height
-    Scene.tsx       background (sky per season) + layer map
-    Layer.tsx       one diorama layer (mesh + shader + interactions)
-    shaders.ts      layer vertex/fragment (reveal, distortion, alpha)
-    useWaterField.ts GPU water simulation (ping-pong FBO) per layer
-    LeafEmitter.tsx  "leaf" particles when hovering foliage
+    Experience.tsx   shell: <Canvas>, Lenis -> scrollRef, scroll height
+    Scene.tsx        procedural sky + layer map
+    Layer.tsx        one diorama layer (mesh + shader + interactions)
+    shaders.ts       layer vertex/fragment (reveal, distortion, edges, alpha)
+    useWaterField.ts per-layer GPU water sim (ping-pong FBO)
+    LeafEmitter.tsx  leaf particles when hovering foliage
 lib/
-  scene.ts          data-driven layer description (LayerDef[])
-  seasonText.ts     per-season text
-  cursor.ts         WebGL -> DOM event bridge (cursor hover state)
+  scene.ts           data-driven layers (LayerDef[]) + BG_BOTTOM
+  seasonText.ts      per-season text
+  cursor.ts          WebGL -> DOM bridge (cursor hover)
+  audio.ts           audio event bridge + movement labels
 ```
 
-Cross-cutting principle: **data-driven**. Adding an element = one entry in
-`lib/scene.ts` (no logic to touch).
+**Data-driven:** adding an element = one entry in `lib/scene.ts`.
 
----
+## Features
 
-## Features & specs
+**1. Diorama travel.** Lenis gives a `scrollRef` (0..1). Layers pan left
+(`panX = -scroll·parallax·viewportW·SCROLL_SPAN`); higher `parallax` = faster.
+Each layer is **centered at its station** (scroll `0, ⅓, ⅔, 1`) regardless of
+parallax, with `offsetX` placing it left/right. Plus a gentle mid-journey zoom
+and a subtle inverse-mouse parallax.
 
-### 1. Layered diorama (horizontal parallax + zoom)
-- Each layer is a textured plane positioned along an X axis (`scene.ts`).
-- Scroll (Lenis, smoothed) gives a `scrollRef` 0..1 that **pans** the layers
-  left: `panX = -scroll * parallax * viewportW * SCROLL_SPAN`. The more
-  "foreground" a layer is (higher `parallax`), the faster it moves.
-- 4 **stations** (seasons) at `x = s * 4.8`, s ∈ {0, ⅓, ⅔, 1}.
-- Gentle **zoom** mid-journey: `zoom = 1 + 0.18·sin(scroll·π)`.
-- Subtle **inverse mouse parallax** (layers shift opposite to the cursor).
+**2. Sky.** `Scene.tsx` interpolates a top/bottom gradient between 4 palettes by
+scroll. Procedural, no asset.
 
-### 2. Sky per season
-`Scene.tsx` interpolates a gradient (top/bottom) between 4 palettes based on
-scroll (spring → summer → autumn → winter). No asset, fully procedural.
+**3. Water effect (core).** Per-layer ping-pong FBO (`useWaterField.ts`, 256²):
+round deposit along the cursor path → diffusion (spreads straight) → a
+**hold-then-absorb** drying model (water holds briefly, then drains at a constant
+per-pixel rate so wet-first dries first; repeated passes build up to `WET_MAX` and
+last longer). Trail width tracks cursor speed. The sim is **paused ~11s after the
+last interaction**, so only the hovered layer runs.
+The layer **samples** this field (`shaders.ts`): reveals pigment
+(`baseOpacity` → 100% where wet), drives a **confined distortion**, and breaks the
+trail's **edges into small irregular cloud-like blobs** (band-limited noise — core
+stays clean, dry paper untouched).
 
-### 3. Water effect on hover (the core)
-Simulated per layer in a **ping-pong FBO** (`useWaterField.ts`, 256²):
-- **round deposit** along the cursor path (the cursor is the head);
-- **diffusion** (water spreads);
-- **absorption**: `HOLD` 1s with nothing, then **fade** (`ABSORB_TAU`) **+
-  shrink** (`ERODE`) → the puddle is "soaked up" by the paper;
-- trace **width** driven by cursor **speed** (`RADIUS_MIN/MAX`);
-- **optimization**: a layer's sim is **paused** ~7s after the last interaction →
-  only the hovered layer runs.
+**4. Alpha compositing.** `alpha = coverage (1 − paper)`: the painted shape is
+opaque (textured paper base + watercolor), the white paper around it transparent.
+An **eroded interior mask** keeps thin structures (trunk, branches) rigid; only
+large masses distort.
 
-The layer **samples** this field (`shaders.ts`):
-- reveals the watercolor (rest pigment `baseOpacity` → 100% where wet);
-- **organic** edges only away from the center (warp ∝ how faint the water is);
-- **distortion** = a subtle low-frequency animated image displacement, **confined**
-  to the wet area **and** to the inside of the shape (silhouette/trunk stay fixed).
+**5. Reveal.** Per layer, triggered when its station comes within `REVEAL_START`
+of the scroll, then bloomed over `INTRO_MS` by time (latched). Two stages: the
+**paper shape** first, then the **watercolor** in waves of droplets (3 staggered
+noise layers).
 
-### 4. Alpha compositing + paper base
-- `alpha` = "coverage" (1 - paper) → the **shape is opaque** (covers what's
-  behind it), the **white paper around it is transparent**.
-- Inside: a **textured paper base** + the watercolor on top.
-- **Eroded interior mask**: thin structures (trunk, branches) don't distort →
-  they stay straight; only large masses ripple.
+**6. Leaf particles.** Hovering foliage (green, upper part) emits small gray
+leaves that spin and fall — GPU pool of 600 points, multiply blend, sparse.
 
-### 5. Reveal on load
-`uAppear` (per layer, staggered by depth):
-1. the **paper shape** appears first;
-2. then the **watercolor** reveals in **waves of droplets** (3 staggered, blended
-   noise layers — the method described by the original studio).
+**7. Custom cursor.** A dot trails the mouse, a ring trails further (clamped so
+the dot stays inside). Over a WebGL image (bridged via `cursor.ts`) the ring
+shrinks to an opaque white circle. Desktop only.
 
-### 6. Leaf particles
-When hovering the **foliage** (green, upper part), `LeafEmitter.tsx` emits small
-gray leaves that spin and fall (GPU pool of 600 points, multiply blend). Emission
-is sparse (probabilistic).
+**8. Per-season text.** Fixed left column; seasons scroll through a window. A
+per-line glass effect blurs + widens + fades lines near the top/bottom edge.
 
-### 7. Custom cursor
-`CustomCursor.tsx`: a **dot** trailing the mouse + a **ring** trailing further
-(clamped so the dot stays inside). Over a WebGL image (event via `cursor.ts`),
-the ring **shrinks, turns opaque white** and the dot turns white (CSS
-transition). Desktop only.
+**9. Per-season music.** One looping movement per season, crossfaded on scroll.
+Streaming `HTMLAudioElement`, only spring preloaded (others lazy), inactive tracks
+paused, autoplay unlocked on first gesture. `SeasonPlayer.tsx` shows real state
+and toggles play/pause.
 
-### 8. Per-season text
-`SeasonText.tsx`: a **fixed block on the left** (30% top → 20% bottom). Seasons
-are stacked and **scroll** through this window. A glass-like effect is applied
-**per line** based on its position: a line near the top/bottom is **blurred +
-slightly widened + faded**; centered it's sharp. The first season has top padding
-so that on load (before scrolling) no text sits in the effect zone.
-
-### 9. Per-season music
-`SeasonAudio.tsx`: one looping track per season, **crossfaded** on scroll.
-- Streaming `HTMLAudioElement` (no full decode → low memory).
-- Only `spring` is preloaded; the others **load lazily** when we get near them.
-- Inactive tracks are **paused** (no CPU / no network).
-- Autoplay is **unlocked on the first user gesture** (browser policy) → music
-  starts on the first scroll/click.
-
----
-
-## Key tuning knobs (where to touch)
+## Tuning knobs
 
 | Effect | File | Constant |
 |---|---|---|
 | Station spacing / pan speed | `Layer.tsx` | `SCROLL_SPAN` |
 | Journey zoom | `Layer.tsx` | `ZOOM_AMP` |
-| Scroll length | `Experience.tsx` | `…vh` height |
-| Water absorption | `useWaterField.ts` | `HOLD`, `ABSORB_TAU`, `ERODE` |
-| Trace width | `useWaterField.ts` | `RADIUS_MIN/MAX`, `SPEED_*` |
-| Distortion strength/shape | `scene.ts` (`distortion`) · `shaders.ts` | |
-| Reveal (duration/stagger) | `Layer.tsx` | `/2.6`, `order*0.3` |
-| Text glass effect | `SeasonText.tsx` | `EDGE`, blur `e*2.5`, scaleX `e*0.025` |
+| Scroll length | `Experience.tsx` | spacer `…vh` |
+| Reveal trigger / duration | `Layer.tsx` | `REVEAL_START`, `INTRO_MS` |
+| Water drying | `useWaterField.ts` | `ABSORB`, `FILL`, `WET_MAX`, `HOLD_BASE`, `HOLD_PER_WET` |
+| Trail width | `useWaterField.ts` | `RADIUS_MIN/MAX`, `SPEED_SLOW/FAST` |
+| Trail edge blobs | `shaders.ts` | fringe / blob block |
+| Distortion | `scene.ts` (`distortion`) · `shaders.ts` | |
+| Text glass | `SeasonText.tsx` | `EDGE`, blur `e*2.5` |
 | Sky palettes | `Scene.tsx` | `SKY` |
 | Audio crossfade / prefetch | `SeasonAudio.tsx` | `FADE`, `PREFETCH` |
 | Content / positions | `lib/scene.ts`, `lib/seasonText.ts` | |
 
----
+## Notes
 
-## Performance
+- Layers **lazy-mount** near their station and the water sim pauses when idle;
+  audio streams and loads lazily; DPR capped at `[1, 2]`.
+- Shaders sample sRGB without explicit decode/encode (visually fine; revisit if
+  adding color grading).
 
-- **Off-screen layers are frustum-culled** → their shader doesn't run.
-- The **water sim is paused** on non-hovered layers.
-- Audio **streams** and loads lazily; inactive tracks are paused.
-- DPR capped at `[1, 2]`.
-
----
-
-## Improvable / known
-
-- **Color space**: raw shaders sample sRGB without decoding and don't encode the
-  output ("accidentally correct" visually). Worth fixing if we add grading or
-  colors drift.
-- **Reactive waveform**: the music plays but isn't yet visualized; an
-  `AnalyserNode` (via `MediaElementSource`) could drive a waveform and feed the
-  shader (e.g., distortion reacting to the strings).
-- **Autumn & winter**: a single element each (missing a 2nd foreground asset).
-- **"Spread only behind"**: diffusion is isotropic; a directional (anisotropic,
-  movement-biased) spread would be more faithful.
-- **Baked noise**: the studio bakes its noise into a texture (perf). We compute
-  it live; fine here, but worth considering if the layer count grows.
-- **Mobile / responsive**: built desktop-first. The custom cursor and some
-  values are disabled/unoptimized on touch; layer framing would benefit from
-  responsive values.
-- **Per-layer CPU sampler**: each layer reads its pixels via a canvas (for
-  hover/particles). Watch memory for very large images.
-- **Audio file weight**: re-encode to ~96–128 kbps and/or trim to a loopable
-  ~60–90s segment (e.g. `ffmpeg -i in.mp3 -b:a 112k -t 90 out.mp3`).
+Status, limitations and roadmap: see [HANDOVER.md](HANDOVER.md).

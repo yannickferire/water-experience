@@ -69,14 +69,6 @@ function LayerContent({ def, order, scrollRef }: Props) {
   const revealStarted = useRef(false); // latched: has the reveal begun?
   const maxAppear = useRef(0); // latched reveal (so it stays revealed once shown)
 
-  // Captured at mount: was this layer already in view? -> it blooms on load (spring);
-  // others reveal as the scroll brings them near their station.
-  const initiallyVisible = useMemo(
-    () => Math.abs(scrollRef.current - def.station) < REVEAL_START,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
-  );
-
   const tex = useTexture(def.src);
   useMemo(() => {
     tex.colorSpace = THREE.SRGBColorSpace;
@@ -145,13 +137,13 @@ function LayerContent({ def, order, scrollRef }: Props) {
 
     const scroll = scrollRef.current;
 
-    // The reveal TRIGGERS once the station comes near (d < REVEAL_START) — or right
-    // away for the layer already in view at load — then blooms over INTRO_MS by
-    // TIME, so the animation is always visible however fast you scroll. Latched via
+    // The reveal TRIGGERS once the station comes within REVEAL_START of the scroll
+    // (so the layer in view at load, d=0, blooms immediately), then runs over
+    // INTRO_MS by TIME — always visible however fast you scroll. Latched via
     // revealStarted + maxAppear so it never restarts or un-reveals. uAppear feeds
     // the two-stage (paper then pigment) droplet reveal in the shader.
     const d = Math.abs(scroll - def.station);
-    if (revealStarted.current || initiallyVisible || d < REVEAL_START) {
+    if (revealStarted.current || d < REVEAL_START) {
       revealStarted.current = true;
       elapsed.current += dt;
       const e = THREE.MathUtils.clamp(elapsed.current / INTRO_MS, 0, 1);

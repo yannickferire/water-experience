@@ -1,132 +1,75 @@
 # Handover
 
-Status snapshot of the **Water Experience** project. For setup see
-[README.md](README.md); for architecture see [SPECS.md](SPECS.md); for assets see
-[ASSETS.md](ASSETS.md).
-
----
+Project status. Setup → [README.md](README.md) · architecture → [SPECS.md](SPECS.md)
+· assets → [ASSETS.md](ASSETS.md).
 
 ## Completed
 
-### Core experience
-- **Data-driven scene** — the whole diorama is one array of layers in
-  [`lib/scene.ts`](lib/scene.ts) (`LayerDef`); adding/moving an element is a
-  one-line change, no logic to touch.
-- **Horizontal scroll travel** — Lenis smooth scroll → `scrollRef` (0..1) drives
-  the camera journey across 4 season **stations** (scroll `0, ⅓, ⅔, 1`).
-  Per-layer **parallax** (speed), gentle mid-journey **zoom**, and subtle
-  **inverse-mouse parallax**.
-- **Station-correct placement** — each layer is centered at its station
-  *regardless* of its parallax factor; horizontal placement within a scene via
-  `offsetX`. (Fixed an earlier bug where parallax broke alignment.)
-- **Lazy mount + reveal on approach** — a layer's texture is only loaded when its
-  station nears the viewport; it then **blooms in over time** (paper shape first,
-  then watercolor in droplet waves). Reveal is **time-paced and latched**, so the
-  animation is always visible however fast you scroll, and never replays.
+**Travel & structure**
+- Data-driven scene — every element is one entry in [`lib/scene.ts`](lib/scene.ts).
+- Horizontal scroll journey (Lenis → `scrollRef`) across 4 stations, per-layer
+  parallax, mid-journey zoom, inverse-mouse parallax.
+- Each layer centered at its station regardless of parallax (`offsetX` for L/R).
+- Layers lazy-mount near their station, then reveal: paper shape first, then
+  watercolor droplets — time-paced and latched (always visible, never replays).
 
-### Water effect (the centerpiece)
-- **Per-layer GPU water simulation** in a ping-pong HalfFloat FBO
-  ([`useWaterField.ts`](components/Experience/useWaterField.ts), 256²):
-  round deposit along the cursor path, diffusion (spreading), then a
-  **hold-then-absorb** drying model (water freezes briefly, then is soaked up
-  wet-first-dries-first; saturated spots last longer).
-- **Speed-driven brush width** (slow = narrow, fast = wider, capped).
-- **Clean straight trail core** with **organic, cloud-like irregular edges**
-  added in the layer shader ([`shaders.ts`](components/Experience/shaders.ts)) via
-  a band-limited noise warp/blob (edges only, never the dry image or the core).
-- **Idle-pause optimization** — a layer's sim is paused ~11s after the last
-  interaction, so only the hovered layer actually runs on the GPU.
+**Water effect**
+- Per-layer GPU sim in a ping-pong FBO ([`useWaterField.ts`](components/Experience/useWaterField.ts),
+  256²): deposit along the cursor → diffusion → hold-then-absorb drying
+  (wet-first dries first; saturated lasts longer). Brush width tracks speed.
+- Clean straight core, organic cloud-like irregular edges (shader, band-limited).
+- Sim pauses ~11s after the last interaction (only the hovered layer runs).
 
-### Rendering / compositing
-- **Alpha compositing from white-background assets** — the shader computes
-  coverage from luminance/saturation: the painted shape becomes opaque (over a
-  procedural **textured paper base** + the watercolor), the white paper around it
-  becomes transparent. **No manual cut-out needed.**
-- **Eroded interior mask** — thin structures (trunks, branches) don't distort and
-  stay rigid; only large masses (canopy) ripple. Silhouette stays fixed.
-- **Distortion** — subtle low-frequency *animated* image displacement, confined to
-  the wet area and the shape interior (no per-pixel zigzag/swirl).
+**Rendering**
+- Alpha compositing from white-background assets (no cut-out): shape opaque over a
+  procedural paper base, white paper transparent.
+- Eroded interior mask keeps thin structures (trunk/branches) rigid.
+- Confined low-frequency animated distortion (no zigzag/swirl).
 
-### Atmosphere & UI
-- **Procedural per-season sky** — gradient interpolated between 4 palettes by
-  scroll ([`Scene.tsx`](components/Experience/Scene.tsx)); no asset.
-- **Leaf particles** — small gray leaves spin/fall when hovering foliage (green,
-  upper part only — not trunk/grass); GPU point pool, sparse emission
-  ([`LeafEmitter.tsx`](components/Experience/LeafEmitter.tsx)).
-- **Custom cursor** — dual-trailing ring + dot; over a WebGL image the ring
-  shrinks to an opaque white circle ([`CustomCursor.tsx`](components/CustomCursor.tsx),
-  bridged from WebGL via [`lib/cursor.ts`](lib/cursor.ts)). Desktop only.
-- **Per-season floating text** — fixed left column that scrolls through a window
-  with a per-line glass effect (blur + slight widen + fade by position); intro
-  rise on load ([`SeasonText.tsx`](components/SeasonText.tsx),
-  [`lib/seasonText.ts`](lib/seasonText.ts)).
-- **"Scroll to explore" hint** — fades in after the text settles, animated
-  underline loop, fades out on first scroll ([`ScrollHint.tsx`](components/ScrollHint.tsx)).
-- **Per-season music** — one looping Vivaldi movement per season, crossfaded on
-  scroll; streamed `HTMLAudioElement`, lazy-loaded, autoplay unlocked on first
-  gesture, inactive tracks paused ([`SeasonAudio.tsx`](components/SeasonAudio.tsx),
-  [`lib/audio.ts`](lib/audio.ts)).
-- **Audio player UI** — bottom-right, click to play/pause, shows the current
-  movement/tempo, reflects **real** playing state ([`SeasonPlayer.tsx`](components/SeasonPlayer.tsx)).
-
-### Tooling / docs
-- `scripts/optimize-audio.mjs` (`npm run optimize:audio`) — ffmpeg trim + compress
-  with `.orig.mp3` backups.
-- Docs: [README.md](README.md), [SPECS.md](SPECS.md), [ASSETS.md](ASSETS.md), this file.
-
----
+**Atmosphere & UI**
+- Procedural per-season sky gradient ([`Scene.tsx`](components/Experience/Scene.tsx)).
+- Leaf particles on foliage hover ([`LeafEmitter.tsx`](components/Experience/LeafEmitter.tsx)).
+- Custom cursor, ring + dot ([`CustomCursor.tsx`](components/CustomCursor.tsx)).
+- Per-season text column with per-line glass effect + intro rise ([`SeasonText.tsx`](components/SeasonText.tsx)).
+- "Scroll to explore" hint ([`ScrollHint.tsx`](components/ScrollHint.tsx)).
+- Per-season Vivaldi music: crossfade, lazy-load, autoplay unlock, real-state
+  player ([`SeasonAudio.tsx`](components/SeasonAudio.tsx), [`SeasonPlayer.tsx`](components/SeasonPlayer.tsx)).
+- `npm run optimize:audio` — ffmpeg trim/compress with `.orig.mp3` backups.
 
 ## Known limitations
 
-- **Assets are AI-generated placeholders** — the watercolor images in
-  `public/assets/` are temporary; quality/consistency across the 4 hero trees and
-  foreground elements still needs a final art pass.
-- **Mobile optimization not finalized** — desktop-first; the custom cursor and
-  hover water effect are disabled below 1024px / on touch, but layout, scroll
-  distance, text sizing and performance on mobile haven't been tuned.
-- **Audio licensing** — current tracks are placeholders; final build needs a
-  confirmed CC-licensed recording (e.g. Musopen / John Harrison) credited properly.
-- **No reduced-motion / accessibility pass** — no `prefers-reduced-motion`
-  fallback, the experience is motion- and pointer-heavy, and the WebGL content is
-  not exposed to assistive tech.
-- **Client-only / no SSR for the canvas** — minimal SEO surface; no meta/OG/social
-  cards set up yet.
-- **No automated tests** — behavior is validated visually.
-- **Water feel is hand-tuned** — the constants in `useWaterField.ts` /
-  `shaders.ts` are dialed in by eye and may need re-tuning if assets or scale
-  change.
-
----
+- **Assets are AI-generated placeholders** — need a final, consistent art pass.
+- **Mobile not finalized** — desktop-first; cursor + hover water disabled below
+  1024px / touch; layout, scroll distance and text sizing untuned on mobile.
+- **Audio licensing** — placeholders; needs a confirmed CC recording, credited.
+- **No reduced-motion / a11y pass** — motion- and pointer-heavy; WebGL not exposed
+  to assistive tech.
+- **Client-only canvas** — minimal SEO; no meta/OG yet.
+- **No automated tests** — validated visually.
 
 ## Next steps
 
 _Initial list — to be extended._
 
-### Features to build
-- **"Open this concerto" button** — a control that opens a panel/overlay where the
-  **full concerto** of the current season plays (not just the looping snippet),
-  with a **nice reveal animation** opening the panel (and presumably switching the
-  audio source from the looping movement to the complete recording).
-- **Loading screen** — an intro/loading screen shown while assets, fonts and the
-  first audio track load, transitioning smoothly into the experience.
-- **Ending** — a final screen at the end of the journey with closing **text and
-  credits** (assets, music, inspiration, author).
+**Features to build**
+- **"Open this concerto" button** — opens a panel where the current season's
+  **full concerto** plays (not the loop), with a nice reveal animation.
+- **Loading screen** — intro shown while assets/fonts/audio load, easing into the
+  experience.
+- **Ending** — final screen with closing text and credits (assets, music,
+  inspiration, author).
 
-### Polish & production
-- **Finalize assets** — replace placeholders with the final, style-consistent
-  watercolor set (matching hero trees + a foreground element for each season;
-  autumn/winter could use a 2nd foreground element — one line each in
-  `lib/scene.ts`).
-- **Mobile / responsive** — tune scroll distance, layer scale and text sizing for
-  small screens; decide on a touch fallback for the water/hover interaction.
-- **Blurry text effects** — push the text further toward something singular and
-  immersive with richer blur (e.g. stronger/animated focus pull, soft glow or
-  defocus on enter/exit, depth-of-field feel) beyond the current per-line glass
-  effect in [`SeasonText.tsx`](components/SeasonText.tsx).
-- **Reduced motion** — honor `prefers-reduced-motion` (skip the bloom/parallax,
-  freeze or simplify the water).
-- **Audio** — lock in the final licensed recordings, add proper credits, and
-  re-run `npm run optimize:audio`.
-- **SEO / sharing** — page metadata, Open Graph image, favicon, title/description.
-- **Polish** — review reveal timing (`INTRO_MS`, `REVEAL_START`) and station
-  spacing (`SCROLL_SPAN`) once the real assets are in.
+**Polish & production**
+- **Finalize assets** — final watercolor set (consistent hero trees + foregrounds).
+- **Zoom / dezoom during navigation** — develop richer zoom-in/zoom-out moves as
+  you travel between stations (beyond the current subtle mid-journey `ZOOM_AMP`),
+  for a more cinematic camera.
+- **Mobile / responsive** — scroll distance, layer scale, text sizing, touch
+  fallback for the water/hover effect.
+- **Blurry text effects** — richer, more immersive text blur (animated focus pull,
+  soft glow/defocus on enter/exit) beyond the current glass effect.
+- **Reduced motion** — honor `prefers-reduced-motion`.
+- **Audio** — final licensed recordings + credits, re-run `npm run optimize:audio`.
+- **SEO / sharing** — metadata, Open Graph image, favicon.
+- **Polish** — revisit reveal timing (`INTRO_MS`, `REVEAL_START`) and station
+  spacing (`SCROLL_SPAN`) with the real assets.

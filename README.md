@@ -18,7 +18,7 @@ with original assets and custom shaders.
 | 3D / WebGL | [Three.js](https://threejs.org/) via [React Three Fiber](https://r3f.docs.pmnd.rs/) + [`drei`](https://github.com/pmndrs/drei) |
 | Smooth scroll | [Lenis](https://github.com/darkroomengineering/lenis) |
 | Shaders | inline GLSL (TypeScript template strings) |
-| Fonts | `Caudex` (text), `Inter` (UI), `Sono` (mono / player) via `next/font` |
+| Fonts | `Caudex` (text), `Sono` (mono / player) via `next/font` |
 | Language | TypeScript |
 | Deploy | [Vercel](https://vercel.com/) |
 

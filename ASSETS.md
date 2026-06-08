@@ -1,21 +1,21 @@
-# Assets — Voyage des 4 saisons (aquarelle)
+# Assets
 
-Diorama aquarelle qu'on traverse **horizontalement** au scroll : Printemps → Été
-→ Automne → Hiver (ordre de Vivaldi). Chaque saison est une « station » avec
-1 à 2 éléments peints, sur fond de ciel dégradé qui change avec la saison.
+Watercolor diorama of the four seasons, traveled horizontally on scroll
+(Spring → Summer → Autumn → Winter, Vivaldi's order). Each season is a "station"
+with 1–2 painted elements over a procedural sky.
 
 ## Format & compositing
 
-- **Export sur fond BLANC, AUCUN détourage.** Le shader calcule la transparence
-  (alpha = « couverture ») à partir de la luminance : la **forme peinte devient
-  opaque**, le **papier blanc autour devient transparent**. Inutile de découper.
-- PNG ou JPG, sRGB, ~1500–2048 px, sujet **centré, entier, avec marge**.
-- Au rendu, la forme est posée sur une **base papier texturée** (générée en
-  shader), et l'aquarelle se révèle dessus.
+- **Export on a WHITE background. Do NOT cut out.** The shader derives
+  transparency from luminance: the painted shape becomes opaque, the white paper
+  around it becomes transparent.
+- PNG or JPG, sRGB, ~1500–2048 px, subject **centered and whole, with margin**.
+- At render time the shape sits on a procedural **textured paper base**, with the
+  watercolor revealed on top.
 
-## Style (le « style bible »)
+## Style bible
 
-Aquarelle, à coller à chaque prompt pour rester cohérent :
+Paste into every prompt to keep the set consistent:
 
 ```
 loose watercolour painting, soft translucent washes, wet-on-wet bleeding edges,
@@ -24,31 +24,33 @@ light airy palette, single isolated subject, plain white background, no hard
 outline, no cast shadow, no frame, no text, centered with generous padding
 ```
 
-Règles : un seul modèle/esthétique, **lumière haut-gauche** partout, cadrage
-proche entre les 4 arbres-héros (même « espèce » qui change de saison). Outils
-gratuits : Leonardo.ai, Bing/Designer (DALL·E 3), Google ImageFX, Draw Things (Mac).
+Rules: one aesthetic across all assets, **light from the upper-left** everywhere,
+and **consistent framing** for the four hero trees (same "species" changing with
+the season). Free tools: Leonardo.ai, Bing Image Creator (DALL·E 3), Google
+ImageFX, Draw Things (Mac).
 
-## Assets en place (`/public/assets/`)
+## Current assets (`/public/assets/`)
 
-| Saison | Fichiers |
-|---|---|
-| 🌸 Printemps | `tree-spring.jpg` (héros) · `ducks-spring.jpg` (mare, 1er plan) |
-| ☀️ Été | `tree-summer.jpg` (héros) · `sunflower-summer.jpg` (1er plan) |
-| 🍂 Automne | `tree-autumn.jpg` (héros) |
-| ❄️ Hiver | `tree-winter.jpg` (héros) |
+| Season | Hero | Foreground |
+|---|---|---|
+| 🌸 Spring | `tree-spring.jpg` | `ducks-spring.jpg` |
+| ☀️ Summer | `tree-summer.jpg` | `sunflower-summer.jpg` |
+| 🍂 Autumn | `tree-autumn.jpg` | `deer-autumn.jpg` |
+| ❄️ Winter | `tree-winter.jpg` | `squirrel-winter.jpg` |
 
-Chaque fichier = une entrée dans `lib/scene.ts` (position `x` le long du voyage,
-`scale`, `parallax`, `baseOpacity`, `distortion`, `particles`, `tilt`, `flipX`).
+Each file is one entry in [`lib/scene.ts`](lib/scene.ts) (`station`, `offsetX`,
+`y`, `scale`, `parallax`, `baseOpacity`, `distortion`, `particles`, `tilt`,
+`flipX`). Adding an element = one line.
 
-### À compléter plus tard
-- Un 2ᵉ élément de premier plan pour **automne** et **hiver** (1 ligne chacun
-  dans `lib/scene.ts`).
-- Les **ciels** restent procéduraux (dégradé interpolé par saison) → pas d'asset.
+The **skies are procedural** (a gradient interpolated per season) — no asset.
 
-## Audio — Vivaldi, Les Quatre Saisons (à intégrer)
+## Audio — Vivaldi, The Four Seasons
 
-Un mouvement par saison, crossfadé au scroll. Interprétation **libre**
-obligatoire : **Musopen** → John Harrison / Wichita State University (CC-BY).
+One movement per season, crossfaded on scroll. Use a **freely-licensed**
+recording (e.g. Musopen → John Harrison / Wichita State University, CC-BY).
+
 ```
 /public/audio/  spring.mp3  summer.mp3  autumn.mp3  winter.mp3
 ```
+
+Compress/trim with `npm run optimize:audio` (keeps `.orig.mp3` backups).
